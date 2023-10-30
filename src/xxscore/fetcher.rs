@@ -123,7 +123,7 @@ async fn browse_xx(
     let proxy_server = proxy_server.as_ref().map(|s| s.as_str());
     let launch_options = LaunchOptions::default_builder()
         .path(Some(default_executable().map_err(|e| anyhow!(e))?))
-        .headless(false)
+        // .headless(false)
         .proxy_server(proxy_server)
         .build()?;
     let browser = Browser::new(launch_options)?;

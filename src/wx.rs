@@ -133,3 +133,25 @@ pub async fn revoke_msg(client: &Client, wechat_proxy: &str, msgs: Vec<String>) 
     }
     Ok(())
 }
+
+pub async fn send_wecom_msg(
+    c: &Client,
+    wechat_proxy: &str,
+    msg: &str,
+    to_user: &str,
+) -> Result<()> {
+    let api = format!("{}/cgi-bin/message/send", wechat_proxy);
+    let resp = c
+        .post(api)
+        .json(&json!({
+            "touser": to_user,
+            "msgtype": "markdown",
+            "markdown": {
+                "content": msg
+            }
+        }))
+        .send()
+        .await?;
+    info!("企业微信应用返回: {:?}", resp.text().await?);
+    Ok(())
+}

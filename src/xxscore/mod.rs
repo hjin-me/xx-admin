@@ -1,29 +1,22 @@
 pub mod fetcher;
 
-use crate::wx::send_msg_to_bot;
-use crate::xxscore::fetcher::Fetcher;
+use crate::wx::{send_msg_to_bot, send_wecom_msg};
+use crate::xxscore::fetcher::{Fetcher, Member};
 use anyhow::Result;
 use reqwest::Client;
 use std::ops::Sub;
-// (uid, name, score, department)
-pub type MemberScore = (u64, String, u64, String);
 
 pub async fn daily_score<F: Fetcher>(
+    client: &Client,
     date: &str,
     f: &F,
     wechat_bots: Vec<&str>,
     org_id: u64,
+    admin_user: &str,
+    wechat_proxy: &str,
 ) -> Result<()> {
     let mut score = f.get_score(date).await?;
-    let mut input: Vec<MemberScore> = vec![];
-    for item in &score.data {
-        input.push((
-            item.user_id,
-            item.user_name.clone(),
-            item.range_real_score,
-            item.dept_names.clone(),
-        ))
-    }
+
     score.data.sort_by(|a, b| {
         b.range_real_score
             .partial_cmp(&a.range_real_score)
@@ -34,7 +27,7 @@ pub async fn daily_score<F: Fetcher>(
     let mut grinds = score
         .data
         .iter()
-        .filter(|a| a.range_real_score > 35)
+        .filter(|a| a.range_real_score > 34)
         .map(|a| a.user_name.clone())
         .collect::<Vec<String>>();
     grinds.truncate(20);
@@ -87,9 +80,53 @@ pub async fn daily_score<F: Fetcher>(
     );
 
     for bot in wechat_bots {
-        send_msg_to_bot(&Client::new(), bot, &msg).await?;
+        send_msg_to_bot(client, bot, &msg).await?;
     }
+    // 发送全量汇总信息给管理员
+    total_notice(client, wechat_proxy, date, score.data, admin_user).await?;
+
     Ok(())
+}
+
+async fn total_notice(
+    client: &Client,
+    wp: &str,
+    date: &str,
+    ms: Vec<Member>,
+    admin_user: &str,
+) -> Result<()> {
+    let msg = ms
+        .iter()
+        .filter(|m| m.range_real_score > 0)
+        .map(|m| {
+            if m.range_real_score < 25 {
+                format!(
+                    "> {}: <font color=\"warning\">{}</font>",
+                    m.user_name, m.range_real_score
+                )
+            } else if m.range_real_score < 35 {
+                format!("> {}: {}", m.user_name, m.range_real_score)
+            } else {
+                format!(
+                    "> {}: <font color=\"info\">{}</font>",
+                    m.user_name, m.range_real_score
+                )
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    let inactive_count = ms.iter().filter(|m| m.range_real_score < 1).count();
+    send_wecom_msg(
+        &client,
+        wp,
+        &format!(
+            "**{} 学习强国积分情况**\n{}\n\n{} 人未学习",
+            date, msg, inactive_count
+        ),
+        admin_user,
+    )
+    .await
 }
 
 pub fn get_yesterday() -> String {
