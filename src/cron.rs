@@ -45,7 +45,7 @@ pub async fn start_daily_score(p: &Config) -> Result<()> {
             {
                 Ok(r) => match r {
                     Ok(_) => {
-                        info!("{}学习积分统计成功", yesterday);
+                        info!("{} 学习积分统计成功", yesterday);
                     }
                     Err(e) => {
                         warn!("Error: {:?}", e);

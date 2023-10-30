@@ -1,4 +1,4 @@
-use crate::wx::{send_image_msg, send_text_msg};
+use crate::wx::{revoke_msg, send_image_msg, send_text_msg};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use headless_chrome::browser::default_executable;
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::Add;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{error, warn};
+use tracing::{error, info, warn};
 
 #[async_trait]
 pub trait Fetcher {
@@ -189,14 +189,19 @@ async fn login(
     let mut ok = false;
     while !ok {
         match loop_login(client, &tab, login_user, wechat_proxy).await {
-            Ok(_) => ok = true,
+            Ok(_) => {
+                info!("登陆成功");
+                ok = true
+            }
             Err(e) => {
                 error!("登陆失败了: {:?}", e);
+                tokio::time::sleep(Duration::from_secs(5)).await;
                 tab.reload(false, None)?;
                 continue;
             }
         };
         if !ok {
+            tokio::time::sleep(Duration::from_secs(5)).await;
             tab.reload(false, None)?; // 重新加载
         }
     }
@@ -209,17 +214,27 @@ async fn loop_login(
     login_user: &str,
     wechat_proxy: &str,
 ) -> Result<()> {
+    info!("等待二维码刷新");
     let img_data = wait_qr(tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;
-    let (_m1, _m2) = send_login_msg(client, login_user, &img_data, wechat_proxy).await?;
-    let btn = tab.wait_for_element_with_custom_timeout("form button", Duration::from_secs(280))?;
+    info!("获取登陆二维码成功");
+    let (m1, m2) = send_login_msg(client, login_user, &img_data, wechat_proxy).await?;
+    let _dms = DropMsg {
+        wechat_proxy: wechat_proxy.to_string(),
+        client: client.clone(),
+        ms: vec![m1, m2],
+    };
+    info!("发送登陆消息通知");
+    let btn = tab.wait_for_element_with_custom_timeout("form button", Duration::from_secs(260))?;
+    info!("登陆成功，点击确定按钮");
     btn.click()?;
     tab.wait_for_element("#userName")?;
+    info!("完成登陆");
     Ok(())
 }
 
 fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
     let el = tab.wait_for_element("iframe")?;
-    std::thread::sleep(std::time::Duration::from_secs(2));
+    std::thread::sleep(Duration::from_secs(3));
     let viewport = el.get_box_model()?.margin_viewport();
     let png_data = tab.capture_screenshot(
         Page::CaptureScreenshotFormatOption::Png,
@@ -227,7 +242,6 @@ fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
         Some(viewport),
         true,
     )?;
-    // tab.capture_screenshot()
     Ok(png_data)
 }
 
@@ -249,4 +263,25 @@ async fn send_login_msg(
     .await?;
 
     Ok((m1, m2))
+}
+
+struct DropMsg {
+    client: Client,
+    wechat_proxy: String,
+    ms: Vec<String>,
+}
+
+impl Drop for DropMsg {
+    fn drop(&mut self) {
+        let ms = self.ms.clone();
+        let wp = self.wechat_proxy.clone();
+        let c = self.client.clone();
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                let wp = wp.clone();
+                let c = c.clone();
+                let _ = revoke_msg(&c, &wp, ms).await;
+            });
+        });
+    }
 }

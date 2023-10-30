@@ -2,14 +2,14 @@ use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
-use tracing::info;
+use tracing::{debug, info};
 
 #[derive(Debug, Clone, Deserialize)]
 struct UploadMediaResponse {
-    #[serde(rename = "errcode")]
-    err_code: i64,
-    #[serde(rename = "errmsg")]
-    err_msg: String,
+    // #[serde(rename = "errcode")]
+    // err_code: i64,
+    // #[serde(rename = "errmsg")]
+    // err_msg: String,
     #[serde(default)]
     media_id: String,
     // #[serde(default)]
@@ -19,10 +19,10 @@ struct UploadMediaResponse {
 }
 #[derive(Debug, Clone, Deserialize)]
 struct BasicResponse {
-    #[serde(rename = "errcode")]
-    err_code: i64,
-    #[serde(rename = "errmsg")]
-    err_msg: String,
+    // #[serde(rename = "errcode")]
+    // err_code: i64,
+    // #[serde(rename = "errmsg")]
+    // err_msg: String,
     #[serde(rename = "msgid")]
     msg_id: String,
 }
@@ -112,6 +112,24 @@ pub async fn send_msg_to_bot(c: &Client, api: &str, msg: &str) -> Result<()> {
         }))
         .send()
         .await?;
-    info!("bot resp: {:?}", resp.text().await?);
+    info!("企业微信机器人返回 bot resp: {:?}", resp.text().await?);
+    Ok(())
+}
+
+pub async fn revoke_msg(client: &Client, wechat_proxy: &str, msgs: Vec<String>) -> Result<()> {
+    let api = format!("{}/cgi-bin/message/recall", wechat_proxy);
+    for m in msgs {
+        info!("revoke msg is {}", m);
+        let resp = client
+            .post(&api)
+            .json(&json!({
+                "msgid": m
+            }))
+            .send()
+            .await?;
+        debug!("revoke msg status code: {}", resp.status());
+        let data_raw = resp.text().await?;
+        debug!("revoke msg resp: {}", data_raw);
+    }
     Ok(())
 }
