@@ -1,4 +1,5 @@
-FROM hjin/leptos-build:2023072001413511edb3 as builder
+FROM rust:latest as builder
+RUN apt-get update && apt-get install -y librust-clang-sys-dev
 WORKDIR /build
 COPY . .
 RUN cargo build --release

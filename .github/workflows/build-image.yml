@@ -1,0 +1,19 @@
+name: Build Rust
+on:
+  push:
+    tags:
+      - "**"             # Push events to v1 tag
+jobs:
+  rust:
+    name: Rust Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Publish to Registry
+        id: publish
+        uses: elgohr/Publish-Docker-Github-Action@v5
+        with:
+          name: hjin/xx-admin
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          tag_names: true
