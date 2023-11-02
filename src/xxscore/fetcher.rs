@@ -198,12 +198,14 @@ async fn login(
                 error!("登陆失败了: {:?}", e);
                 tokio::time::sleep(Duration::from_secs(5)).await;
                 tab.reload(false, None)?;
+                info!("刷新页面尝试重新登陆");
                 continue;
             }
         };
         if !ok {
             tokio::time::sleep(Duration::from_secs(5)).await;
             tab.reload(false, None)?; // 重新加载
+            info!("刷新页面尝试重新登陆");
         }
     }
     Ok(())
@@ -226,8 +228,9 @@ async fn loop_login(
     };
     info!("发送登陆消息通知");
     let btn = tab.wait_for_element_with_custom_timeout("form button", Duration::from_secs(260))?;
-    info!("登陆成功，点击确定按钮");
+    info!("扫码验证成功，点击确定按钮");
     btn.click()?;
+    info!("完成点击登陆按钮");
     tab.wait_for_element("#userName")?;
     info!("完成登陆");
     Ok(())
