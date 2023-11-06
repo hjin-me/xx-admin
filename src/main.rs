@@ -2,6 +2,7 @@ mod config;
 mod cron;
 mod wx;
 mod xxscore;
+mod health;
 
 use crate::config::Config;
 use crate::cron::start_daily_score;

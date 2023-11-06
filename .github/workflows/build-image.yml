@@ -1,8 +1,8 @@
-name: Build Rust
+name: Build Image
 on:
   push:
     tags:
-      - "**"             # Push events to v1 tag
+      - "**"
 jobs:
   rust:
     name: Rust Build
