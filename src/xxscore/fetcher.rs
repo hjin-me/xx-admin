@@ -167,7 +167,7 @@ async fn try_navigate_to_xx(
         match navigate_to_xx(browser, client, login_user, wechat_proxy).await {
             Ok(tab) => return Ok(tab),
             Err(e) => {
-                warn!("登陆失败了, {:?}", e);
+                warn!("登陆失败了: {:?}", e);
             }
         }
     }
@@ -180,13 +180,6 @@ async fn navigate_to_xx(
     login_user: &str,
     wechat_proxy: &str,
 ) -> Result<Arc<Tab>> {
-    let tabs = browser.get_tabs();
-
-    for x in tabs.lock().unwrap().iter() {
-        x.close(false)
-            .map_err(|e| anyhow!("关闭标签页面失败: {}", e))?;
-    }
-
     let tab = browser
         .new_tab()
         .map_err(|e| anyhow!("创建新标签页失败: {}", e))?;
@@ -224,8 +217,6 @@ async fn loop_login(
     info!("扫码验证成功，点击确定按钮");
     btn.click()?;
     info!("完成点击登陆按钮");
-    tab.wait_for_element("#userName")?;
-    info!("完成登陆");
     Ok(())
 }
 
