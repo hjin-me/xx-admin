@@ -126,8 +126,9 @@ async fn browse_xx(
         .port(Some(8000))
         .sandbox(false)
         .proxy_server(proxy_server)
-        .build()?;
-    let browser = Browser::new(launch_options)?;
+        .build()
+        .map_err(|e| anyhow!("构造 Chrome 启动参数失败: {}", e))?;
+    let browser = Browser::new(launch_options).map_err(|e| anyhow!("启动浏览器失败: {}", e))?;
 
     let tab = try_navigate_to_xx(&browser, http_client, login_user, wechat_proxy, 20).await?;
 
@@ -182,11 +183,15 @@ async fn navigate_to_xx(
     let tabs = browser.get_tabs();
 
     for x in tabs.lock().unwrap().iter() {
-        x.close(false)?;
+        x.close(false)
+            .map_err(|e| anyhow!("关闭标签页面失败: {}", e))?;
     }
 
-    let tab = browser.new_tab()?;
-    tab.navigate_to("https://study.xuexi.cn/")?;
+    let tab = browser
+        .new_tab()
+        .map_err(|e| anyhow!("创建新标签页失败: {}", e))?;
+    tab.navigate_to("https://study.xuexi.cn/")
+        .map_err(|e| anyhow!("打开学习页面失败: {}", e))?;
 
     tab.wait_until_navigated()?;
     tokio::time::sleep(Duration::from_secs(3)).await;
