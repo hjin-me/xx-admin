@@ -215,7 +215,7 @@ async fn loop_login(
         ms: vec![m1, m2],
     };
     info!("发送登陆消息通知");
-    let btn = tab.wait_for_element_with_custom_timeout("form button", Duration::from_secs(20))?;
+    let btn = tab.wait_for_element_with_custom_timeout("form button", Duration::from_secs(260))?;
     info!("扫码验证成功，点击确定按钮");
     btn.click()?;
     info!("完成点击登陆按钮");
