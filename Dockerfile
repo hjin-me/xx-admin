@@ -4,7 +4,7 @@ WORKDIR /build
 COPY . .
 RUN cargo build --release
 
-FROM hjin/chrome:202310310152077a6aa9
+FROM hjin/chrome:2023110603475551c7e6
 COPY --from=builder /build/target/release/xx-admin /usr/local/bin/xx-admin
 ENV CHROME /usr/bin/google-chrome
 ENTRYPOINT ["xx-admin"]

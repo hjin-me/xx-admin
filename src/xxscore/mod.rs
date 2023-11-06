@@ -47,10 +47,7 @@ pub async fn daily_score<F: Fetcher>(
         None => "".to_string(),
     };
     let encourage_msg = if inactive_count > 0 {
-        format!(
-            "{}位同学未完成学习任务，学习不积极，思想有问题。",
-            inactive_count
-        )
+        format!("{}位同学未完成学习任务。", inactive_count)
     } else {
         "".to_string()
     };
@@ -166,10 +163,13 @@ mod test {
         let xx_fetcher = MockFetcher { data: j };
 
         daily_score(
+            &Client::new(),
             "20230606",
             &xx_fetcher,
             c.notice_bot.iter().map(|s| s.as_str()).collect(),
             c.org_id,
+            "SongSong",
+            "",
         )
         .await
     }

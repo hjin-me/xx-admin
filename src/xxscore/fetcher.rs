@@ -144,7 +144,7 @@ async fn browse_xx(
     tokio::time::sleep(Duration::from_secs(3)).await;
 
     if tab.get_url().starts_with("https://login.xuexi.cn") {
-        println!("login");
+        info!("未登录，尝试登陆");
         login(&browser, http_client, login_user, wechat_proxy).await?;
     }
     // Run JavaScript in the page
@@ -189,6 +189,7 @@ async fn login(
     // tab.activate()?;
     let mut ok = false;
     while !ok {
+        info!("尝试登陆");
         match loop_login(client, &tab, login_user, wechat_proxy).await {
             Ok(_) => {
                 info!("登陆成功");

@@ -49,7 +49,7 @@ pub async fn send_image_msg(
     let data = serde_json::from_str::<UploadMediaResponse>(&data_raw)
         .map_err(|e| anyhow!("send_image_msg failed, {:?}, text: {}", e, data_raw))?;
 
-    // println!("status: {}, resp: {}", resp_status, data_raw);
+    info!("上传图片， resp: {:?}", &data);
 
     let api = format!("{}/cgi-bin/message/send", wechat_proxy);
     let resp = client
@@ -69,6 +69,8 @@ pub async fn send_image_msg(
 
     let data = serde_json::from_str::<BasicResponse>(&data_raw)
         .map_err(|e| anyhow!("send_image_msg failed, {:?}, text: {}", e, data_raw))?;
+
+    info!("发送图片消息， resp: {:?}", &data);
     Ok(data.msg_id)
 }
 
@@ -95,6 +97,7 @@ pub async fn send_text_msg(
 
     let data = serde_json::from_str::<BasicResponse>(&data_raw)
         .map_err(|e| anyhow!("send_image_msg failed, {:?}, text: {}", e, data_raw))?;
+    info!("发送文本消息, {:?}", data);
     Ok(data.msg_id)
 }
 
