@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::Add;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{error, info, warn};
+use tracing::{info, warn};
 
 #[async_trait]
 pub trait Fetcher {
@@ -128,25 +128,9 @@ async fn browse_xx(
         .proxy_server(proxy_server)
         .build()?;
     let browser = Browser::new(launch_options)?;
-    let tabs = browser.get_tabs();
-    let tab = {
-        let ts = tabs.lock().unwrap();
-        if ts.iter().len() == 0 {
-            browser.new_tab()?
-        } else {
-            ts.iter().next().unwrap().clone()
-        }
-    };
-    tab.activate()?;
-    tab.navigate_to("https://study.xuexi.cn/")?;
 
-    tab.wait_until_navigated()?;
-    tokio::time::sleep(Duration::from_secs(3)).await;
+    let tab = try_navigate_to_xx(&browser, http_client, login_user, wechat_proxy, 20).await?;
 
-    if tab.get_url().starts_with("https://login.xuexi.cn") {
-        info!("未登录，尝试登陆");
-        login(&browser, http_client, login_user, wechat_proxy).await?;
-    }
     // Run JavaScript in the page
     let yesterday_js = include_str!("yesterday_score.js");
     let body = tab.wait_for_element("body")?;
@@ -171,45 +155,48 @@ async fn browse_xx(
 
     Ok(score_result)
 }
-
-async fn login(
+async fn try_navigate_to_xx(
     browser: &Browser,
     client: &Client,
     login_user: &str,
     wechat_proxy: &str,
-) -> Result<()> {
-    let tabs = browser.get_tabs();
-    let tab = tabs
-        .lock()
-        .unwrap()
-        .iter()
-        .find(|tab| tab.get_url().contains("login.xuexi.cn/login2"))
-        .cloned()
-        .ok_or(anyhow!("no login tab"))?;
-    // tab.activate()?;
-    let mut ok = false;
-    while !ok {
-        info!("尝试登陆");
-        match loop_login(client, &tab, login_user, wechat_proxy).await {
-            Ok(_) => {
-                info!("登陆成功");
-                ok = true
-            }
+    times: i8,
+) -> Result<Arc<Tab>> {
+    for _ in 0..times {
+        match navigate_to_xx(browser, client, login_user, wechat_proxy).await {
+            Ok(tab) => return Ok(tab),
             Err(e) => {
-                error!("登陆失败了: {:?}", e);
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                tab.reload(false, None)?;
-                info!("刷新页面尝试重新登陆");
-                continue;
+                warn!("登陆失败了, {:?}", e);
             }
-        };
-        if !ok {
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            tab.reload(false, None)?; // 重新加载
-            info!("刷新页面尝试重新登陆");
         }
     }
-    Ok(())
+    Err(anyhow!("经过{}次重试，未能成功登陆", times))
+}
+
+async fn navigate_to_xx(
+    browser: &Browser,
+    client: &Client,
+    login_user: &str,
+    wechat_proxy: &str,
+) -> Result<Arc<Tab>> {
+    let tabs = browser.get_tabs();
+
+    for x in tabs.lock().unwrap().iter() {
+        x.close(false)?;
+    }
+
+    let tab = browser.new_tab()?;
+    tab.navigate_to("https://study.xuexi.cn/")?;
+
+    tab.wait_until_navigated()?;
+    tokio::time::sleep(Duration::from_secs(3)).await;
+
+    if tab.get_url().starts_with("https://login.xuexi.cn") {
+        info!("未登录，尝试登陆");
+        loop_login(client, &tab, login_user, wechat_proxy).await?;
+    }
+
+    Ok(tab)
 }
 
 async fn loop_login(
@@ -219,7 +206,7 @@ async fn loop_login(
     wechat_proxy: &str,
 ) -> Result<()> {
     info!("等待二维码刷新");
-    let img_data = wait_qr(tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;
+    let img_data = wait_qr(&tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;
     info!("获取登陆二维码成功");
     let (m1, m2) = send_login_msg(client, login_user, &img_data, wechat_proxy).await?;
     let _dms = DropMsg {
@@ -228,7 +215,7 @@ async fn loop_login(
         ms: vec![m1, m2],
     };
     info!("发送登陆消息通知");
-    let btn = tab.wait_for_element_with_custom_timeout("form button", Duration::from_secs(260))?;
+    let btn = tab.wait_for_element_with_custom_timeout("form button", Duration::from_secs(20))?;
     info!("扫码验证成功，点击确定按钮");
     btn.click()?;
     info!("完成点击登陆按钮");

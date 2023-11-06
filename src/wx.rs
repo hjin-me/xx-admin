@@ -43,13 +43,19 @@ pub async fn send_image_msg(
         .multipart(reqwest::multipart::Form::new().part("media", part))
         .send()
         .await?;
-    // let resp_status = resp.status();
+    let resp_status = resp.status();
     let data_raw = resp.text().await?;
 
-    let data = serde_json::from_str::<UploadMediaResponse>(&data_raw)
-        .map_err(|e| anyhow!("send_image_msg failed, {:?}, text: {}", e, data_raw))?;
+    let data = serde_json::from_str::<UploadMediaResponse>(&data_raw).map_err(|e| {
+        anyhow!(
+            "send_image_msg failed, {:?}, text: [{}]{}",
+            e,
+            resp_status,
+            data_raw
+        )
+    })?;
 
-    info!("上传图片， resp: {:?}", &data);
+    info!("上传图片， [{}]{:?}", resp_status, &data);
 
     let api = format!("{}/cgi-bin/message/send", wechat_proxy);
     let resp = client
@@ -64,13 +70,19 @@ pub async fn send_image_msg(
         .send()
         .await?;
 
-    // let resp_status = resp.status();
+    let resp_status = resp.status();
     let data_raw = resp.text().await?;
 
-    let data = serde_json::from_str::<BasicResponse>(&data_raw)
-        .map_err(|e| anyhow!("send_image_msg failed, {:?}, text: {}", e, data_raw))?;
+    let data = serde_json::from_str::<BasicResponse>(&data_raw).map_err(|e| {
+        anyhow!(
+            "send_image_msg failed, {:?}, text: [{}]{}",
+            e,
+            resp_status,
+            data_raw
+        )
+    })?;
 
-    info!("发送图片消息， resp: {:?}", &data);
+    info!("发送图片消息，[{}]{:?}", resp_status, &data);
     Ok(data.msg_id)
 }
 
@@ -92,12 +104,18 @@ pub async fn send_text_msg(
         }))
         .send()
         .await?;
-    // let resp_status = resp.status();
+    let resp_status = resp.status();
     let data_raw = resp.text().await?;
 
-    let data = serde_json::from_str::<BasicResponse>(&data_raw)
-        .map_err(|e| anyhow!("send_image_msg failed, {:?}, text: {}", e, data_raw))?;
-    info!("发送文本消息, {:?}", data);
+    let data = serde_json::from_str::<BasicResponse>(&data_raw).map_err(|e| {
+        anyhow!(
+            "send_image_msg failed, {:?}, text: [{}]{}",
+            e,
+            resp_status,
+            data_raw
+        )
+    })?;
+    info!("发送文本消息, [{}]{:?}", resp_status, data);
     Ok(data.msg_id)
 }
 
@@ -115,7 +133,11 @@ pub async fn send_msg_to_bot(c: &Client, api: &str, msg: &str) -> Result<()> {
         }))
         .send()
         .await?;
-    info!("企业微信机器人返回 bot resp: {:?}", resp.text().await?);
+    info!(
+        "企业微信机器人返回 bot resp: [{}]{:?}",
+        resp.status(),
+        resp.text().await?
+    );
     Ok(())
 }
 
@@ -155,6 +177,11 @@ pub async fn send_wecom_msg(
         }))
         .send()
         .await?;
-    info!("企业微信应用返回: {:?}", resp.text().await?);
+
+    info!(
+        "企业微信应用返回: [{}]{:?}",
+        resp.status(),
+        resp.text().await?
+    );
     Ok(())
 }

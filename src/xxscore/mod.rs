@@ -5,6 +5,7 @@ use crate::xxscore::fetcher::{Fetcher, Member};
 use anyhow::Result;
 use reqwest::Client;
 use std::ops::Sub;
+use tracing::info;
 
 pub async fn daily_score<F: Fetcher>(
     client: &Client,
@@ -112,10 +113,11 @@ async fn total_notice(
         })
         .collect::<Vec<_>>()
         .join("\n");
+    info!("今日统计结果，{}", msg);
 
     let inactive_count = ms.iter().filter(|m| m.range_real_score < 1).count();
     send_wecom_msg(
-        &client,
+        client,
         wp,
         &format!(
             "**{} 学习强国积分情况**\n{}\n\n{} 人未学习",
@@ -150,7 +152,7 @@ mod test {
         }
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_cmd() -> Result<()> {
         tracing_subscriber::fmt::init();
 
@@ -162,14 +164,22 @@ mod test {
 
         let xx_fetcher = MockFetcher { data: j };
 
+        let xx_fetcher = fetcher::FetcherImpl::new(
+            &c.admin_user,
+            &c.xx_org_gray_id,
+            &c.wechat_proxy,
+            c.proxy_server.clone(),
+        );
+        let client = Client::builder().no_proxy().build()?;
+
         daily_score(
-            &Client::new(),
-            "20230606",
+            &client,
+            "20231105",
             &xx_fetcher,
             c.notice_bot.iter().map(|s| s.as_str()).collect(),
             c.org_id,
-            "SongSong",
-            "",
+            c.admin_user.as_str(),
+            c.wechat_proxy.as_str(),
         )
         .await
     }
