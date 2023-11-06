@@ -7,7 +7,7 @@ use crate::config::Config;
 use crate::cron::start_daily_score;
 use anyhow::Result;
 use clap::Parser;
-use tokio::fs;
+use tokio::{fs, signal};
 use tracing::{info, Level};
 
 #[derive(Parser, Debug)]
@@ -36,7 +36,14 @@ async fn main() -> Result<()> {
     let contents = fs::read_to_string(&args.config).await?;
     let serv_conf: Config = toml::from_str(contents.as_str())?;
 
-    start_daily_score(&serv_conf).await?;
+    tokio::select! {
+        r = start_daily_score(&serv_conf) => {
+            r?
+        },
+        _ = signal::ctrl_c() => {
+            info!("收到退出命令");
+        },
+    }
 
     Ok(())
 }
