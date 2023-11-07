@@ -428,6 +428,35 @@ impl SendMsgReq {
     }
 }
 
+pub struct DropMsg<T>
+where
+    T: MsgApi + Clone,
+{
+    mp: T,
+    ms: Vec<String>,
+}
+impl<T: MsgApi + Clone> DropMsg<T> {
+    pub fn new(mp: &T, ms: Vec<String>) -> Self {
+        Self { mp: mp.clone(), ms }
+    }
+}
+
+impl<T> Drop for DropMsg<T>
+where
+    T: MsgApi + Clone,
+{
+    fn drop(&mut self) {
+        let ms = self.ms.clone();
+        let mp = self.mp.clone();
+        tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                let mp = mp.clone();
+                let _ = mp.recall_msgs(ms).await;
+            });
+        });
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;

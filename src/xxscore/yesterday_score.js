@@ -1,8 +1,7 @@
-async (d, orgGrayId) => {
+async function yesterday_score(d, orgGrayId) {
     console.log("I am running", d, orgGrayId);
     let data = {
-        apiCode: "ab4afc14",
-        dataMap: {
+        apiCode: "ab4afc14", dataMap: {
             startDate: d,
             endDate: d,
             offset: 0,
@@ -15,8 +14,7 @@ async (d, orgGrayId) => {
     };
     let result = await fetch("https://odrp.xuexi.cn/report/commonReport", {
         headers: {
-            accept: "application/json, text/plain, */*",
-            "content-type": "application/json;charset=UTF-8",
+            accept: "application/json, text/plain, */*", "content-type": "application/json;charset=UTF-8",
         },
         referrer: "https://study.xuexi.cn/",
         referrerPolicy: "strict-origin-when-cross-origin",
@@ -28,24 +26,17 @@ async (d, orgGrayId) => {
         .then((resp) => resp.json())
         .then((resp) => JSON.parse(resp.data_str))
         .then((resp) => ({
-            date: d,
-            ...resp.dataList,
+            date: d, ...resp.dataList,
         }));
     console.log("result is", result);
 
     data = {
-        apiCode: "955eb740",
-        dataMap: {orgGrayId: orgGrayId},
+        apiCode: "955eb740", dataMap: {orgGrayId: orgGrayId},
     };
     result.organization_rank = await fetch("https://odrp.xuexi.cn/report/commonReport", {
-        body: JSON.stringify(data),
-        credentials: "include",
-        headers: {
-            Accept: "application/json, text/plain, */*",
-            "Content-Type": "application/json;charset=utf-8",
-        },
-        method: "POST",
-        mode: "cors",
+        body: JSON.stringify(data), credentials: "include", headers: {
+            Accept: "application/json, text/plain, */*", "Content-Type": "application/json;charset=utf-8",
+        }, method: "POST", mode: "cors",
     })
         .then((resp) => resp.json())
         .then((resp) => JSON.parse(resp.data_str))

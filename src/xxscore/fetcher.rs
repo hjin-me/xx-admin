@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
 use tracing::{info, warn};
-use wx::{MsgApi, MP};
+use wx::{DropMsg, MsgApi, MP};
 
 #[async_trait]
 pub trait Fetcher {
@@ -190,10 +190,7 @@ async fn loop_login<T: MsgApi + Clone>(tab: &Arc<Tab>, login_user: &str, mp: &T)
     let img_data = wait_qr(&tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;
     info!("获取登陆二维码成功");
     let (m1, m2) = send_login_msg(login_user, &img_data, mp).await?;
-    let _dms = DropMsg {
-        mp: mp.clone(),
-        ms: vec![m1, m2],
-    };
+    let _dms = DropMsg::new(&mp, vec![m1, m2]);
     info!("已发送登陆通知");
     let btn = tab
         .wait_for_element_with_custom_timeout("form button", Duration::from_secs(260))
@@ -230,28 +227,4 @@ async fn send_login_msg<T: MsgApi>(u: &str, img_data: &[u8], mp: &T) -> Result<(
         .await?;
 
     Ok((m1, m2))
-}
-
-struct DropMsg<T>
-where
-    T: MsgApi + Clone,
-{
-    mp: T,
-    ms: Vec<String>,
-}
-
-impl<T> Drop for DropMsg<T>
-where
-    T: MsgApi + Clone,
-{
-    fn drop(&mut self) {
-        let ms = self.ms.clone();
-        let mp = self.mp.clone();
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async move {
-                let mp = mp.clone();
-                let _ = mp.recall_msgs(ms).await;
-            });
-        });
-    }
 }
