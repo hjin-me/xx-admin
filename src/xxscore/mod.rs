@@ -2,12 +2,10 @@ pub mod fetcher;
 
 use crate::xxscore::fetcher::{Fetcher, Member};
 use anyhow::Result;
-use reqwest::Client;
 use std::ops::Sub;
 use tracing::info;
-use wx::{send_msg_to_bot, MsgApi};
+use wx::MsgApi;
 pub async fn daily_score<F: Fetcher, T: MsgApi>(
-    client: &Client,
     date: &str,
     f: &F,
     wechat_bots: Vec<&str>,
@@ -77,7 +75,7 @@ pub async fn daily_score<F: Fetcher, T: MsgApi>(
     );
 
     for bot in wechat_bots {
-        send_msg_to_bot(client, bot, &msg).await?;
+        mp.send_bot_msg(bot, &msg).await?;
     }
     // 发送全量汇总信息给管理员
     total_notice(mp, date, score.data, admin_user).await?;
@@ -168,10 +166,8 @@ mod test {
             &mp,
             c.proxy_server.clone(),
         );
-        let client = Client::builder().no_proxy().build()?;
 
         daily_score(
-            &client,
             "20231105",
             &xx_fetcher,
             c.notice_bot.iter().map(|s| s.as_str()).collect(),

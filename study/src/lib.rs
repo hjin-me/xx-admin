@@ -8,23 +8,17 @@ use std::ops::Add;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
-use tracing::{info, warn};
+use tracing::info;
 
 pub struct FetcherImpl {
     login_user: String,
     xx_org_gray_id: String,
-    wechat_proxy: String,
     http_client: Client,
     proxy_server: Option<String>,
 }
 
 impl FetcherImpl {
-    pub fn new(
-        login_user: &str,
-        xx_org_gray_id: &str,
-        wechat_proxy: &str,
-        proxy_server: Option<String>,
-    ) -> Self {
+    pub fn new(login_user: &str, xx_org_gray_id: &str, proxy_server: Option<String>) -> Self {
         let http_client = {
             let b = ClientBuilder::default();
             match proxy_server.as_ref() {
@@ -37,7 +31,6 @@ impl FetcherImpl {
         };
         Self {
             login_user: login_user.to_string(),
-            wechat_proxy: wechat_proxy.to_string(),
             http_client,
             xx_org_gray_id: xx_org_gray_id.to_string(),
             proxy_server: proxy_server.clone().map(|s| s.to_string()),
@@ -48,7 +41,6 @@ impl FetcherImpl {
 async fn browse_xx(
     http_client: &Client,
     login_user: &str,
-    wechat_proxy: &str,
     proxy_server: &Option<String>,
 ) -> Result<()> {
     let proxy_server = proxy_server.as_ref().map(|s| s.as_str());
@@ -89,12 +81,7 @@ async fn browse_xx(
     Ok(())
 }
 
-async fn navigate_to_xx(
-    browser: &Browser,
-    client: &Client,
-    login_user: &str,
-    wechat_proxy: &str,
-) -> Result<Arc<Tab>> {
+async fn navigate_to_xx(browser: &Browser, client: &Client, login_user: &str) -> Result<Arc<Tab>> {
     let tab = browser
         .new_tab()
         .map_err(|e| anyhow!("创建新标签页失败: {}", e))?;
@@ -108,7 +95,7 @@ async fn navigate_to_xx(
         Ok(login_btn) => {
             info!("没有登陆");
             login_btn.click()?;
-            loop_login(client, &tab, login_user, "").await?
+            loop_login(client, &tab, login_user).await?
         }
         Err(e) => {
             info!("已经登陆了");
@@ -123,12 +110,7 @@ async fn navigate_to_xx(
     Ok(tab)
 }
 
-async fn loop_login(
-    client: &Client,
-    tab: &Arc<Tab>,
-    login_user: &str,
-    wechat_proxy: &str,
-) -> Result<()> {
+async fn loop_login(client: &Client, tab: &Arc<Tab>, login_user: &str) -> Result<()> {
     // info!("等待二维码刷新");
     // let img_data = wait_qr(&tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;
     // info!("获取登陆二维码成功");
@@ -159,7 +141,6 @@ fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
     Ok(png_data)
 }
 
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -167,7 +148,7 @@ mod test {
     async fn test_browser() -> Result<()> {
         tracing_subscriber::fmt::init();
         let client = ClientBuilder::new().no_proxy().build()?;
-        browse_xx(&client, "", "", &None).await?;
+        browse_xx(&client, "", &None).await?;
         Ok(())
     }
 }

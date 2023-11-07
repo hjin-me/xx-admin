@@ -3,7 +3,6 @@ use crate::xxscore::fetcher::FetcherImpl;
 use crate::xxscore::{daily_score, get_yesterday};
 use anyhow::Result;
 use chrono::{Local, Timelike};
-use reqwest::ClientBuilder;
 use std::time::Duration;
 use tokio::time::interval;
 use tracing::{info, trace, warn};
@@ -13,17 +12,6 @@ pub async fn start_daily_score(p: &Config) -> Result<()> {
     tokio::spawn(async move {
         let mut ticker = interval(Duration::from_secs(60));
 
-        // let http_client = {
-        //     let b = ClientBuilder::default();
-        //     match p.proxy_server {
-        //         Some(s) => b
-        //             .proxy(reqwest::Proxy::all(s.to_owned()).expect("解析 proxy 格式失败"))
-        //             .build()
-        //             .expect("初始化 http client 失败"),
-        //         None => b.no_proxy().build().expect("初始化 http client 失败"),
-        //     }
-        // };
-
         let mp = wx::MP::new(&p.corp_id, &p.corp_secret, p.agent_id);
 
         let xx_fetcher = FetcherImpl::new(
@@ -32,17 +20,6 @@ pub async fn start_daily_score(p: &Config) -> Result<()> {
             &mp,
             p.proxy_server.clone(),
         );
-
-        let http_client = {
-            let b = ClientBuilder::default();
-            match p.proxy_server.as_ref() {
-                Some(s) => b
-                    .proxy(reqwest::Proxy::all(s.to_owned()).expect("解析 proxy 格式失败"))
-                    .build()
-                    .expect("初始化 http client 失败"),
-                None => b.no_proxy().build().expect("初始化 http client 失败"),
-            }
-        };
 
         loop {
             ticker.tick().await;
@@ -61,7 +38,6 @@ pub async fn start_daily_score(p: &Config) -> Result<()> {
             match tokio::time::timeout(
                 Duration::from_secs(2 * 60 * 60),
                 daily_score(
-                    &http_client,
                     &yesterday,
                     &xx_fetcher,
                     p.notice_bot.iter().map(|s| s.as_str()).collect(),
