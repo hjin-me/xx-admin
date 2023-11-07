@@ -1,20 +1,19 @@
 pub mod fetcher;
 
-use crate::wx::{send_msg_to_bot, send_wecom_msg};
 use crate::xxscore::fetcher::{Fetcher, Member};
 use anyhow::Result;
 use reqwest::Client;
 use std::ops::Sub;
 use tracing::info;
-
-pub async fn daily_score<F: Fetcher>(
+use wx::{send_msg_to_bot, MsgApi};
+pub async fn daily_score<F: Fetcher, T: MsgApi>(
     client: &Client,
     date: &str,
     f: &F,
     wechat_bots: Vec<&str>,
     org_id: u64,
     admin_user: &str,
-    wechat_proxy: &str,
+    mp: &T,
 ) -> Result<()> {
     let mut score = f.get_score(date).await?;
 
@@ -81,14 +80,13 @@ pub async fn daily_score<F: Fetcher>(
         send_msg_to_bot(client, bot, &msg).await?;
     }
     // 发送全量汇总信息给管理员
-    total_notice(client, wechat_proxy, date, score.data, admin_user).await?;
+    total_notice(mp, date, score.data, admin_user).await?;
 
     Ok(())
 }
 
-async fn total_notice(
-    client: &Client,
-    wp: &str,
+async fn total_notice<T: MsgApi>(
+    mp: &T,
     date: &str,
     ms: Vec<Member>,
     admin_user: &str,
@@ -116,16 +114,15 @@ async fn total_notice(
     info!("今日统计结果，{}", msg);
 
     let inactive_count = ms.iter().filter(|m| m.range_real_score < 1).count();
-    send_wecom_msg(
-        client,
-        wp,
+    mp.send_markdown_msg(
+        admin_user,
         &format!(
             "**{} 学习强国积分情况**\n{}\n\n{} 人未学习",
             date, msg, inactive_count
         ),
-        admin_user,
     )
-    .await
+    .await?;
+    Ok(())
 }
 
 pub fn get_yesterday() -> String {
@@ -139,7 +136,7 @@ mod test {
     use crate::config::Config;
     use crate::xxscore::fetcher::MemberScore;
     use async_trait::async_trait;
-    use tokio::fs;
+    use wx::MP;
 
     struct MockFetcher {
         data: MemberScore,
@@ -159,15 +156,16 @@ mod test {
         let conf_str = include_str!("../../config.toml");
         let c = toml::from_str::<Config>(conf_str)?;
 
-        let j: MemberScore =
-            serde_json::from_str(&fs::read_to_string("./src/xxscore/test.json").await?)?;
+        // let j: MemberScore =
+        //     serde_json::from_str(&fs::read_to_string("./src/xxscore/test.json").await?)?;
 
-        let xx_fetcher = MockFetcher { data: j };
+        // let xx_fetcher = MockFetcher { data: j };
+        let mp = MP::new(&c.corp_id, &c.corp_secret, c.agent_id);
 
         let xx_fetcher = fetcher::FetcherImpl::new(
             &c.admin_user,
             &c.xx_org_gray_id,
-            &c.wechat_proxy,
+            &mp,
             c.proxy_server.clone(),
         );
         let client = Client::builder().no_proxy().build()?;
@@ -179,7 +177,7 @@ mod test {
             c.notice_bot.iter().map(|s| s.as_str()).collect(),
             c.org_id,
             c.admin_user.as_str(),
-            c.wechat_proxy.as_str(),
+            &mp,
         )
         .await
     }

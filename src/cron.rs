@@ -12,10 +12,24 @@ pub async fn start_daily_score(p: &Config) -> Result<()> {
     let p = p.clone();
     tokio::spawn(async move {
         let mut ticker = interval(Duration::from_secs(60));
+
+        // let http_client = {
+        //     let b = ClientBuilder::default();
+        //     match p.proxy_server {
+        //         Some(s) => b
+        //             .proxy(reqwest::Proxy::all(s.to_owned()).expect("解析 proxy 格式失败"))
+        //             .build()
+        //             .expect("初始化 http client 失败"),
+        //         None => b.no_proxy().build().expect("初始化 http client 失败"),
+        //     }
+        // };
+
+        let mp = wx::MP::new(&p.corp_id, &p.corp_secret, p.agent_id);
+
         let xx_fetcher = FetcherImpl::new(
             &p.admin_user,
             &p.xx_org_gray_id,
-            &p.wechat_proxy,
+            &mp,
             p.proxy_server.clone(),
         );
 
@@ -53,7 +67,7 @@ pub async fn start_daily_score(p: &Config) -> Result<()> {
                     p.notice_bot.iter().map(|s| s.as_str()).collect(),
                     p.org_id,
                     &p.admin_user,
-                    &p.wechat_proxy,
+                    &mp,
                 ),
             )
             .await
