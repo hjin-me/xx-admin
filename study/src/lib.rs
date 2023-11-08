@@ -29,7 +29,7 @@ fn new_browser(proxy_server: &Option<String>) -> Result<Browser> {
     Ok(browser)
 }
 
-async fn browse_xx<T: MsgApi + Clone>(
+pub async fn browse_xx<T: MsgApi + Clone>(
     mp: &T,
     login_user: &str,
     proxy_server: &Option<String>,
@@ -239,8 +239,10 @@ async fn browse_news(browser: &Browser, url: &str) -> Result<()> {
     tab.navigate_to(url)?;
     time::sleep(Duration::from_secs(10)).await;
     scroll_to(&tab, 394).await?;
-    let mut rng = thread_rng();
-    let s = rng.gen_range(80..110);
+    let s = {
+        let mut rng = thread_rng();
+        rng.gen_range(80..110)
+    };
     info!("阅读文章 {} 秒", s);
     time::sleep(Duration::from_secs(s / 2)).await;
     scroll_to(&tab, 1000).await?;
@@ -261,9 +263,10 @@ async fn browse_video(browser: &Browser, url: &str) -> Result<()> {
     scroll_to(&tab, 394).await?;
     let play_js = include_str!("play.js");
     tab.evaluate(play_js, false)?;
-
-    let mut rng = thread_rng();
-    let s = rng.gen_range(10..20);
+    let s = {
+        let mut rng = thread_rng();
+        rng.gen_range(10..20)
+    };
     info!("观看视频 {} 秒", s);
     time::sleep(Duration::from_secs(s / 2)).await;
     scroll_to(&tab, 500).await?;

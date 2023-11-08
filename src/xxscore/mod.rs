@@ -131,7 +131,7 @@ pub fn get_yesterday() -> String {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::config::Config;
+    use crate::config::AdminConfig;
     use crate::xxscore::fetcher::MemberScore;
     use async_trait::async_trait;
     use wx::MP;
@@ -152,7 +152,7 @@ mod test {
         tracing_subscriber::fmt::init();
 
         let conf_str = include_str!("../../config.toml");
-        let c = toml::from_str::<Config>(conf_str)?;
+        let c = toml::from_str::<AdminConfig>(conf_str)?;
 
         // let j: MemberScore =
         //     serde_json::from_str(&fs::read_to_string("./src/xxscore/test.json").await?)?;

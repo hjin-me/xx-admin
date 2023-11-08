@@ -1,15 +1,19 @@
-use crate::config::Config;
+use crate::config::{AdminConfig, StudyConfig};
 use crate::xxscore::fetcher::FetcherImpl;
 use crate::xxscore::{daily_score, get_yesterday};
 use anyhow::Result;
 use chrono::{Local, Timelike};
 use std::time::Duration;
+use study::browse_xx;
+use tokio::fs;
 use tokio::time::interval;
 use tracing::{info, trace, warn};
 
-pub async fn start_daily_score(p: &Config) -> Result<()> {
-    let p = p.clone();
+pub async fn start_daily_score(conf_path: &str) -> Result<()> {
+    let contents = fs::read_to_string(conf_path).await?;
+    let p: AdminConfig = toml::from_str(contents.as_str())?;
     tokio::spawn(async move {
+        info!("学习管理员开始");
         let mut ticker = interval(Duration::from_secs(60));
 
         let mp = wx::MP::new(&p.corp_id, &p.corp_secret, p.agent_id);
@@ -51,6 +55,51 @@ pub async fn start_daily_score(p: &Config) -> Result<()> {
                 Ok(r) => match r {
                     Ok(_) => {
                         info!("{} 学习积分统计成功", yesterday);
+                    }
+                    Err(e) => {
+                        warn!("Error: {:?}", e);
+                    }
+                },
+                Err(e) => {
+                    warn!("Error: {:?}", e);
+                }
+            };
+        }
+    })
+    .await?;
+    Ok(())
+}
+
+pub async fn start_daily_study(conf_path: &str) -> Result<()> {
+    let contents = fs::read_to_string(conf_path).await?;
+    let p: StudyConfig = toml::from_str(contents.as_str())?;
+    tokio::spawn(async move {
+        info!("学习开始");
+        let mut ticker = interval(Duration::from_secs(60));
+
+        let mp = wx::MP::new(&p.corp_id, &p.corp_secret, p.agent_id);
+
+        loop {
+            ticker.tick().await;
+            let d = Local::now();
+            if d.minute() == 30 {
+                info!("继续等待任务开始执行");
+            }
+
+            if d.hour() != p.exec_hour || d.minute() != p.exec_minute {
+                trace!("not time yet");
+                continue;
+            }
+
+            match tokio::time::timeout(
+                Duration::from_secs(2 * 60 * 60),
+                browse_xx(&mp, &p.to_user, &p.proxy_server),
+            )
+            .await
+            {
+                Ok(r) => match r {
+                    Ok(_) => {
+                        info!("今天的学习强国就逛到这里了");
                     }
                     Err(e) => {
                         warn!("Error: {:?}", e);

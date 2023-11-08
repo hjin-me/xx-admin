@@ -23,3 +23,4 @@ clap = { version = "4.4.7", features = ["derive", "error-context", "help", "std"
 axum = "0.6.20"
 
 wx = { path = "wx" }
+study = { path = "study" }

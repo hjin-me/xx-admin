@@ -4,11 +4,10 @@ mod health;
 mod serv;
 mod xxscore;
 
-use crate::config::Config;
-use crate::cron::start_daily_score;
+use crate::cron::{start_daily_score, start_daily_study};
 use anyhow::Result;
 use clap::Parser;
-use tokio::{fs, signal};
+use tokio::signal;
 use tracing::{info, Level};
 
 #[derive(Parser, Debug)]
@@ -19,6 +18,8 @@ struct Args {
     config: String,
     #[arg(short, long, default_value = "info")]
     log: String,
+    #[arg(long, default_value = "admin")]
+    cmd: String,
 }
 
 #[tokio::main]
@@ -30,21 +31,27 @@ async fn main() -> Result<()> {
         .finish();
 
     tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
-    // get pwd
     let pwd = std::env::current_dir().unwrap();
     info!(conf_path = &args.config, cwd = ?pwd, "Starting up",);
     info!("Version: {}", env!("COMMIT_ID"));
-    let contents = fs::read_to_string(&args.config).await?;
-    let serv_conf: Config = toml::from_str(contents.as_str())?;
-
-    tokio::select! {
-        r = start_daily_score(&serv_conf) => {
-            r?
+    match args.cmd.as_str() {
+        "admin" => tokio::select! {
+            r = start_daily_score(&args.config) => {
+                r?
+            },
+            _ = signal::ctrl_c() => {
+                info!("收到退出命令");
+            },
         },
-        _ = signal::ctrl_c() => {
-            info!("收到退出命令");
+        _ => tokio::select! {
+            r = start_daily_study(&args.config) => {
+                r?
+            },
+            _ = signal::ctrl_c() => {
+                info!("收到退出命令");
+            },
         },
-    }
+    };
 
     Ok(())
 }
