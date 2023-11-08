@@ -10,7 +10,7 @@ use std::ops::Add;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 use wx::{DropMsg, MsgApi};
 
 fn new_browser(proxy_server: &Option<String>) -> Result<Browser> {
@@ -34,40 +34,63 @@ async fn browse_xx<T: MsgApi + Clone>(
     login_user: &str,
     proxy_server: &Option<String>,
 ) -> Result<()> {
-    let browser = new_browser(proxy_server)?;
+    let mut browser = new_browser(proxy_server)?;
 
-    let _tab = navigate_to_xx(&browser, login_user, mp).await?;
+    let mut logined = false;
+    for _ in 0..20 {
+        if logined {
+            break;
+        }
+        {
+            if browser.get_tabs().lock().unwrap().iter().count() > 3 {
+                drop(browser);
+                info!("哎，关不了 tab，只能关浏览器重启了");
+                browser = new_browser(proxy_server)?;
+            }
+        }
 
+        match try_login(&browser, login_user, mp).await {
+            Ok(_) => logined = true,
+            Err(e) => {
+                warn!("登陆失败: {:?}", e);
+            }
+        };
+    }
+    if !logined {
+        error!("经过20次重试，未能登陆");
+        return Err(anyhow!("经过20次重试，未能登陆"));
+    }
+
+    for _ in 0..2 {
+        match try_study(&browser, login_user, mp).await {
+            Ok(_) => break,
+            Err(e) => {
+                warn!("学习失败: {:?}", e);
+            }
+        };
+    }
     Ok(())
 }
 
-async fn navigate_to_xx<T: MsgApi + Clone>(
+async fn study_report<T: MsgApi + Clone>(
     browser: &Browser,
     login_user: &str,
     mp: &T,
 ) -> Result<()> {
-    let tab = get_one_tab(browser)?;
-    tab.activate()?;
-    tab.navigate_to("https://www.xuexi.cn/")
-        .map_err(|e| anyhow!("打开学习页面失败: {}", e))?;
-
-    tab.wait_until_navigated()?;
-    tokio::time::sleep(Duration::from_secs(2)).await;
-
-    if let Ok(login_btn) = tab.wait_for_element(".login a.login-icon") {
-        info!("没有登陆");
-        login_btn.click()?;
-        time::sleep(Duration::from_secs(2)).await;
-        login(browser, login_user, mp).await?
-    }
-    time::sleep(Duration::from_secs(5)).await;
-
+    let n = get_today_score(browser).await?;
+    info!("发送今日分数");
+    mp.send_text_msg(login_user, &format!("今日学习强国分数是：{}", n))
+        .await?;
+    Ok(())
+}
+async fn try_study<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &T) -> Result<()> {
     let news_list = get_news_list().await?;
     let video_list = get_video_list().await?;
     let mut news_iter = news_list.iter();
     let mut video_iter = video_list.iter();
 
     loop {
+        let tab = get_one_tab(browser)?;
         let todo_tasks = get_today_tasks(&tab).await?;
         if todo_tasks
             .iter()
@@ -115,19 +138,25 @@ async fn navigate_to_xx<T: MsgApi + Clone>(
         }
     }
     study_report(browser, login_user, mp).await?;
-
     Ok(())
 }
+async fn try_login<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &T) -> Result<()> {
+    reset_tabs(browser)?;
+    let tab = get_one_tab(browser)?;
+    tab.activate()?;
+    tab.navigate_to("https://www.xuexi.cn/")
+        .map_err(|e| anyhow!("打开学习页面失败: {}", e))?;
 
-async fn study_report<T: MsgApi + Clone>(
-    browser: &Browser,
-    login_user: &str,
-    mp: &T,
-) -> Result<()> {
-    let n = get_today_score(browser).await?;
-    info!("发送今日分数");
-    mp.send_text_msg(login_user, &format!("今日学习强国分数是：{}", n))
-        .await?;
+    tab.wait_until_navigated()?;
+    tokio::time::sleep(Duration::from_secs(1)).await;
+
+    if let Ok(login_btn) = tab.wait_for_element(".login a.login-icon") {
+        info!("没有登陆");
+        login_btn.click()?;
+        time::sleep(Duration::from_secs(2)).await;
+        login(browser, login_user, mp).await?
+    }
+    time::sleep(Duration::from_secs(5)).await;
     Ok(())
 }
 async fn login<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &T) -> Result<()> {
@@ -363,6 +392,14 @@ async fn get_news_url(api: &str) -> Result<Vec<String>> {
     Ok(latest)
 }
 
+fn reset_tabs(browser: &Browser) -> Result<()> {
+    // headless 模式 close 有问题，这样将就一下
+    let tabs = browser.get_tabs().lock().unwrap();
+    for tab in tabs.iter() {
+        tab.navigate_to("about:blank")?;
+    }
+    Ok(())
+}
 fn get_one_tab(browser: &Browser) -> Result<Arc<Tab>> {
     let tabs = browser.get_tabs().lock().unwrap().clone();
     match tabs.into_iter().next() {
@@ -398,6 +435,27 @@ mod test {
         info!("news: {:?}", r);
         let r = dbg!(get_video_list().await?);
         info!("video: {:?}", r);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_headless_close() -> Result<()> {
+        tracing_subscriber::fmt::init();
+        let browser = new_browser(&None)?;
+
+        let tab = browser.new_tab()?;
+        {
+            let tabs = browser.get_tabs().lock().unwrap();
+            info!("tab 数量 {}", tabs.iter().count());
+        }
+        info!("{:?}", tab.get_target_info()?);
+        info!("关闭标签页");
+        tab.close(false)?;
+        // sleep(Duration::from_secs(3)).await;
+        {
+            let tabs = browser.get_tabs().lock().unwrap();
+            info!("tab 数量 {}", tabs.iter().count());
+        }
         Ok(())
     }
 }
