@@ -113,6 +113,7 @@ async fn browse_xx(
         .port(Some(8000))
         .sandbox(false)
         .proxy_server(proxy_server)
+        .idle_browser_timeout(Duration::from_secs(300))
         .build()
         .map_err(|e| anyhow!("构造 Chrome 启动参数失败: {}", e))?;
     let browser = Browser::new(launch_options).map_err(|e| anyhow!("启动浏览器失败: {}", e))?;
@@ -190,7 +191,7 @@ async fn loop_login<T: MsgApi + Clone>(tab: &Arc<Tab>, login_user: &str, mp: &T)
     let img_data = wait_qr(&tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;
     info!("获取登陆二维码成功");
     let (m1, m2) = send_login_msg(login_user, &img_data, mp).await?;
-    let _dms = DropMsg::new(&mp, vec![m1, m2]);
+    let _dms = DropMsg::new(mp, vec![m1, m2]);
     info!("已发送登陆通知");
     let btn = tab
         .wait_for_element_with_custom_timeout("form button", Duration::from_secs(260))
