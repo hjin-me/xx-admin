@@ -13,18 +13,20 @@ use tokio::time;
 use tracing::{info, warn};
 use wx::{DropMsg, MsgApi};
 
-pub struct FetcherImpl {
-    login_user: String,
-    proxy_server: Option<String>,
-}
-
-impl FetcherImpl {
-    pub fn new(login_user: &str, proxy_server: Option<String>) -> Self {
-        Self {
-            login_user: login_user.to_string(),
-            proxy_server: proxy_server.clone().map(|s| s.to_string()),
-        }
-    }
+fn new_browser(proxy_server: &Option<String>) -> Result<Browser> {
+    let proxy_server = proxy_server.as_ref().map(|s| s.as_str());
+    let launch_options = LaunchOptions::default_builder()
+        .path(Some(default_executable().map_err(|e| anyhow!(e))?))
+        .window_size(Some((1920, 1080)))
+        .port(Some(8000))
+        // .headless(false)
+        .sandbox(false)
+        .idle_browser_timeout(Duration::from_secs(300))
+        .proxy_server(proxy_server)
+        .build()
+        .map_err(|e| anyhow!("构造 Chrome 启动参数失败: {}", e))?;
+    let browser = Browser::new(launch_options).map_err(|e| anyhow!("启动浏览器失败: {}", e))?;
+    Ok(browser)
 }
 
 async fn browse_xx<T: MsgApi + Clone>(
@@ -32,42 +34,9 @@ async fn browse_xx<T: MsgApi + Clone>(
     login_user: &str,
     proxy_server: &Option<String>,
 ) -> Result<()> {
-    let proxy_server = proxy_server.as_ref().map(|s| s.as_str());
-    let launch_options = LaunchOptions::default_builder()
-        .path(Some(default_executable().map_err(|e| anyhow!(e))?))
-        .window_size(Some((1920, 1080)))
-        .headless(false)
-        .port(Some(8000))
-        .sandbox(false)
-        .idle_browser_timeout(Duration::from_secs(300))
-        .proxy_server(proxy_server)
-        .build()
-        .map_err(|e| anyhow!("构造 Chrome 启动参数失败: {}", e))?;
-    let browser = Browser::new(launch_options).map_err(|e| anyhow!("启动浏览器失败: {}", e))?;
+    let browser = new_browser(proxy_server)?;
 
     let _tab = navigate_to_xx(&browser, login_user, mp).await?;
-
-    // Run JavaScript in the page
-    // let yesterday_js = include_str!("yesterday_score.js");
-    // let body = tab.wait_for_element("body")?;
-    // let remote_object =
-    //     body.call_js_fn(yesterday_js, vec![date.into(), xx_org_gray_id.into()], true)?;
-    // let score_result = match remote_object.value {
-    //     Some(serde_json::Value::String(returned_string)) => {
-    //         let v = serde_json::from_str::<MemberScore>(&returned_string)?;
-    //         Ok(v)
-    //     }
-    //     Some(v) => {
-    //         warn!("执行脚本获取数据失败, {:?}", v);
-    //         tokio::time::sleep(Duration::from_secs(60)).await;
-    //         Err(anyhow!("执行脚本获取数据失败"))
-    //     }
-    //     _ => {
-    //         warn!("执行脚本获取数据失败");
-    //         tokio::time::sleep(Duration::from_secs(60)).await;
-    //         Err(anyhow!("执行脚本获取数据失败"))
-    //     }
-    // }?;
 
     Ok(())
 }
@@ -76,16 +45,8 @@ async fn navigate_to_xx<T: MsgApi + Clone>(
     browser: &Browser,
     login_user: &str,
     mp: &T,
-) -> Result<Arc<Tab>> {
-    let tab = {
-        let tabs = browser.get_tabs().lock().unwrap().clone();
-        match tabs.into_iter().next() {
-            Some(tab) => tab,
-            None => browser
-                .new_tab()
-                .map_err(|e| anyhow!("创建新标签页失败: {}", e))?,
-        }
-    };
+) -> Result<()> {
+    let tab = get_one_tab(browser)?;
     tab.activate()?;
     tab.navigate_to("https://www.xuexi.cn/")
         .map_err(|e| anyhow!("打开学习页面失败: {}", e))?;
@@ -107,14 +68,14 @@ async fn navigate_to_xx<T: MsgApi + Clone>(
     let mut video_iter = video_list.iter();
 
     loop {
-        let todo_tasks = get_today_score(&tab).await?;
+        let todo_tasks = get_today_tasks(&tab).await?;
         if todo_tasks
             .iter()
             .filter(|e| e.title.as_str() == "我要选读文章" || e.title.as_str() == "我要视听学习")
             .find(|e| e.day_max_score != e.current_score)
             .is_none()
         {
-            info!("今日阅读任务完成");
+            info!("今日文章和视频任务完成");
             break;
         }
         for task in todo_tasks {
@@ -143,7 +104,7 @@ async fn navigate_to_xx<T: MsgApi + Clone>(
                         task.current_score, task.day_max_score
                     );
                     if let Some(u) = video_iter.next() {
-                        info!("开始阅读 {}", u);
+                        info!("开始观看视频 {}", u);
                         browse_video(&browser, u).await?;
                     }
                 }
@@ -153,10 +114,22 @@ async fn navigate_to_xx<T: MsgApi + Clone>(
             }
         }
     }
+    study_report(browser, login_user, mp).await?;
 
-    Ok(tab)
+    Ok(())
 }
 
+async fn study_report<T: MsgApi + Clone>(
+    browser: &Browser,
+    login_user: &str,
+    mp: &T,
+) -> Result<()> {
+    let n = get_today_score(browser).await?;
+    info!("发送今日分数");
+    mp.send_text_msg(login_user, &format!("今日学习强国分数是：{}", n))
+        .await?;
+    Ok(())
+}
 async fn login<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &T) -> Result<()> {
     info!("遍历所有标签页，找到登陆标签");
     let tab = {
@@ -219,6 +192,7 @@ async fn send_login_msg<T: MsgApi>(u: &str, img_data: &[u8], mp: &T) -> Result<(
 }
 
 async fn scroll_to(tab: &Arc<Tab>, to: i64) -> Result<()> {
+    info!("页面滚动一下");
     let smooth_scroll_js = include_str!("smooth_scroll.js");
 
     let body = tab
@@ -231,37 +205,42 @@ async fn scroll_to(tab: &Arc<Tab>, to: i64) -> Result<()> {
 }
 
 async fn browse_news(browser: &Browser, url: &str) -> Result<()> {
-    let tab = browser.new_tab()?;
+    let tab = get_one_tab(browser)?;
     tab.activate()?;
     tab.navigate_to(url)?;
     time::sleep(Duration::from_secs(10)).await;
     scroll_to(&tab, 394).await?;
     let mut rng = thread_rng();
     let s = rng.gen_range(80..110);
+    info!("阅读文章 {} 秒", s);
     time::sleep(Duration::from_secs(s / 2)).await;
     scroll_to(&tab, 1000).await?;
     time::sleep(Duration::from_secs(s / 2)).await;
     scroll_to(&tab, 3000).await?;
     time::sleep(Duration::from_secs(10)).await;
     scroll_to(&tab, 0).await?;
-    tab.close(false)?;
+    // headless 模式下，close 没有反应？
+    // tab.close(false)?;
     Ok(())
 }
 async fn browse_video(browser: &Browser, url: &str) -> Result<()> {
-    let tab = browser.new_tab()?;
+    let tab = get_one_tab(browser)?;
     tab.activate()?;
     tab.navigate_to(url)?;
-    time::sleep(Duration::from_secs(10)).await;
+    tab.wait_until_navigated()?;
+    time::sleep(Duration::from_secs(1)).await;
     scroll_to(&tab, 394).await?;
+    let play_js = include_str!("play.js");
+    tab.evaluate(play_js, false)?;
+
     let mut rng = thread_rng();
-    let s = rng.gen_range(80..110);
+    let s = rng.gen_range(10..20);
+    info!("观看视频 {} 秒", s);
     time::sleep(Duration::from_secs(s / 2)).await;
-    scroll_to(&tab, 1000).await?;
+    scroll_to(&tab, 500).await?;
     time::sleep(Duration::from_secs(s / 2)).await;
-    scroll_to(&tab, 3000).await?;
-    time::sleep(Duration::from_secs(10)).await;
-    scroll_to(&tab, 0).await?;
-    tab.close(false)?;
+    scroll_to(&tab, 300).await?;
+    // tab.close(false)?;
     Ok(())
 }
 
@@ -295,10 +274,33 @@ struct Data {
 struct TodayScoreRoot {
     pub data: Data,
 }
+async fn get_today_score(browser: &Browser) -> Result<i64> {
+    let tab = get_one_tab(browser)?;
 
-async fn get_today_score(tab: &Arc<Tab>) -> Result<Vec<TodayTask>> {
-    info!("获取今日的学习任务");
     let js = include_str!("today_score.js");
+    let remote_obj = tab.evaluate(js, true)?;
+    let score_result = match remote_obj.value {
+        Some(serde_json::Value::Number(returned_num)) => {
+            let v = returned_num.as_i64().unwrap();
+            Ok(v)
+        }
+        Some(v) => {
+            warn!("执行脚本获取数据失败, {:?}", v);
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            Err(anyhow!("执行脚本获取数据失败"))
+        }
+        _ => {
+            warn!("执行脚本获取数据失败");
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            Err(anyhow!("执行脚本获取数据失败"))
+        }
+    }?;
+    info!("今天学习总分为 {:?}", score_result);
+    Ok(score_result)
+}
+async fn get_today_tasks(tab: &Arc<Tab>) -> Result<Vec<TodayTask>> {
+    info!("获取今日的学习任务");
+    let js = include_str!("today_task.js");
     let remote_obj = tab.evaluate(js, true)?;
     let score_result = match remote_obj.value {
         Some(serde_json::Value::String(returned_string)) => {
@@ -361,6 +363,15 @@ async fn get_news_url(api: &str) -> Result<Vec<String>> {
     Ok(latest)
 }
 
+fn get_one_tab(browser: &Browser) -> Result<Arc<Tab>> {
+    let tabs = browser.get_tabs().lock().unwrap().clone();
+    match tabs.into_iter().next() {
+        Some(tab) => Ok(tab),
+        None => browser
+            .new_tab()
+            .map_err(|e| anyhow!("创建新标签页失败: {}", e)),
+    }
+}
 #[cfg(test)]
 mod test {
     use super::*;
@@ -370,7 +381,6 @@ mod test {
         corp_id: String,
         corp_secret: String,
         agent_id: i64,
-        to_user: String,
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

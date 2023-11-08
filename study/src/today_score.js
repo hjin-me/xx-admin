@@ -1,13 +1,14 @@
-(async function _todayScore() {
-    let resp = await fetch("https://pc-proxy-api.xuexi.cn/delegate/score/days/listScoreProgress?sence=score&deviceType=2", {
-        "headers": {
-            "accept": "application/json, text/plain, */*",
+(async function getTodayScore() {
+    const TodayQuery = "https://pc-proxy-api.xuexi.cn/delegate/score/today/query";
+
+    let res = await fetch(TodayQuery, {
+        method: "GET",
+        headers: {
+            "Content-Type": "application/json",
         },
-        "referrer": "https://pc.xuexi.cn/",
-        "referrerPolicy": "strict-origin-when-cross-origin",
-        "method": "GET",
-        "mode": "cors",
-        "credentials": "include"
+        credentials: "include",
     });
-    return await resp.text();
+    let json = await res.json();
+    console.log("今日学习积分", json?.data?.score);
+    return json?.data?.score;
 })();
