@@ -7,7 +7,6 @@ use serde::{Deserialize, Serialize};
 use std::ops::Add;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::time;
 use tracing::{info, warn};
 use wx::{DropMsg, MsgApi, MP};
 
@@ -122,12 +121,16 @@ async fn browse_xx(
 
     // Run JavaScript in the page
     let yesterday_js = include_str!("yesterday_score.js");
-    let body = tab.wait_for_element("body")?;
-    let remote_object =
-        body.call_js_fn(yesterday_js, vec![date.into(), xx_org_gray_id.into()], true)?;
+    let body = tab
+        .wait_for_element("body")
+        .map_err(|e| anyhow!("获取执行 js 的DOM: {}", e))?;
+    let remote_object = body
+        .call_js_fn(yesterday_js, vec![date.into(), xx_org_gray_id.into()], true)
+        .map_err(|e| anyhow!("执行js脚本失败: {}", e))?;
     let score_result = match remote_object.value {
         Some(serde_json::Value::String(returned_string)) => {
-            let v = serde_json::from_str::<MemberScore>(&returned_string)?;
+            let v = serde_json::from_str::<MemberScore>(&returned_string)
+                .map_err(|e| anyhow!("解析学习强国分数失败: {}: {}", e, returned_string))?;
             Ok(v)
         }
         Some(v) => {
@@ -180,8 +183,9 @@ async fn navigate_to_xx<T: MsgApi + Clone>(
     if tab.get_url().starts_with("https://login.xuexi.cn") {
         info!("未登录，尝试登陆");
         loop_login(&tab, login_user, mp).await?;
-        tokio::time::sleep(Duration::from_secs(3)).await;
+        tokio::time::sleep(Duration::from_secs(5)).await;
     }
+    info!("登陆成功");
 
     Ok(tab)
 }
@@ -199,7 +203,6 @@ async fn loop_login<T: MsgApi + Clone>(tab: &Arc<Tab>, login_user: &str, mp: &T)
     info!("扫码验证成功，点击确定按钮");
     btn.click()?;
     info!("完成点击登陆按钮");
-    time::sleep(Duration::from_secs(5)).await;
     Ok(())
 }
 

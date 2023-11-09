@@ -1,7 +1,7 @@
 pub mod fetcher;
 
 use crate::xxscore::fetcher::{Fetcher, Member};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use std::ops::Sub;
 use tracing::info;
 use wx::MsgApi;
@@ -13,7 +13,10 @@ pub async fn daily_score<F: Fetcher, T: MsgApi>(
     admin_user: &str,
     mp: &T,
 ) -> Result<()> {
-    let mut score = f.get_score(date).await?;
+    let mut score = f
+        .get_score(date)
+        .await
+        .map_err(|e| anyhow!("获取积分失败: {}", e))?;
 
     score.data.sort_by(|a, b| {
         b.range_real_score
@@ -75,10 +78,14 @@ pub async fn daily_score<F: Fetcher, T: MsgApi>(
     );
 
     for bot in wechat_bots {
-        mp.send_bot_msg(bot, &msg).await?;
+        mp.send_bot_msg(&msg, bot)
+            .await
+            .map_err(|e| anyhow!("发送消息给群机器人失败: {}", e))?;
     }
     // 发送全量汇总信息给管理员
-    total_notice(mp, date, score.data, admin_user).await?;
+    total_notice(mp, date, score.data, admin_user)
+        .await
+        .map_err(|e| anyhow!("发送消息给管理员失败: {}", e))?;
 
     Ok(())
 }

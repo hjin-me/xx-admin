@@ -57,11 +57,11 @@ pub async fn start_daily_score(conf_path: &str) -> Result<()> {
                         info!("{} 学习积分统计成功", yesterday);
                     }
                     Err(e) => {
-                        warn!("Error: {:?}", e);
+                        warn!("管理员任务执行异常: {:?}", e);
                     }
                 },
                 Err(e) => {
-                    warn!("Error: {:?}", e);
+                    warn!("管理员任务执行超时: {:?}", e);
                 }
             };
         }
@@ -102,11 +102,11 @@ pub async fn start_daily_study(conf_path: &str) -> Result<()> {
                         info!("今天的学习强国就逛到这里了");
                     }
                     Err(e) => {
-                        warn!("Error: {:?}", e);
+                        warn!("学习任务执行失败: {:?}", e);
                     }
                 },
                 Err(e) => {
-                    warn!("Error: {:?}", e);
+                    warn!("学习任务超时: {:?}", e);
                 }
             };
         }
