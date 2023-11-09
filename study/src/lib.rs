@@ -58,8 +58,14 @@ pub async fn browse_xx<T: MsgApi + Clone>(
     }
     if !logined {
         error!("经过20次重试，未能登陆");
+        mp.send_text_msg(login_user, "登陆失败了，哎")
+            .await
+            .map_err(|e| anyhow!("发送登陆失败消息失败: {}", e))?;
         return Err(anyhow!("经过20次重试，未能登陆"));
     }
+    mp.send_text_msg(login_user, "学习强国登陆成功")
+        .await
+        .map_err(|e| anyhow!("发送登陆成功消息失败: {}", e))?;
 
     for _ in 0..2 {
         match try_study(&browser, login_user, mp).await {

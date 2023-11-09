@@ -73,44 +73,53 @@ pub async fn start_daily_score(conf_path: &str) -> Result<()> {
 pub async fn start_daily_study(conf_path: &str) -> Result<()> {
     let contents = fs::read_to_string(conf_path).await?;
     let p: StudyConfig = toml::from_str(contents.as_str())?;
-    tokio::spawn(async move {
-        info!("学习开始");
-        let mut ticker = interval(Duration::from_secs(60));
+    let mut handles = vec![];
 
-        let mp = wx::MP::new(&p.corp_id, &p.corp_secret, p.agent_id);
+    for c in p.study_schedule {
+        let corp_id = p.corp_id.clone();
+        let corp_secret = p.corp_secret.clone();
+        let proxy_server = p.proxy_server.clone();
+        handles.push(tokio::spawn(async move {
+            info!("学习开始");
+            let mut ticker = interval(Duration::from_secs(60));
 
-        loop {
-            ticker.tick().await;
-            let d = Local::now();
-            if d.minute() == 30 {
-                info!("继续等待任务开始执行");
-            }
+            let mp = wx::MP::new(&corp_id, &corp_secret, p.agent_id);
 
-            if d.hour() != p.exec_hour || d.minute() != p.exec_minute {
-                trace!("not time yet");
-                continue;
-            }
-
-            match tokio::time::timeout(
-                Duration::from_secs(2 * 60 * 60),
-                browse_xx(&mp, &p.to_user, &p.proxy_server),
-            )
-            .await
-            {
-                Ok(r) => match r {
-                    Ok(_) => {
-                        info!("今天的学习强国就逛到这里了");
-                    }
-                    Err(e) => {
-                        warn!("学习任务执行失败: {:?}", e);
-                    }
-                },
-                Err(e) => {
-                    warn!("学习任务超时: {:?}", e);
+            loop {
+                ticker.tick().await;
+                let d = Local::now();
+                if d.minute() == 30 {
+                    info!("继续等待任务开始执行");
                 }
-            };
-        }
-    })
-    .await?;
+
+                if d.hour() != c.hour || d.minute() != c.minute {
+                    trace!("not time yet");
+                    continue;
+                }
+
+                match tokio::time::timeout(
+                    Duration::from_secs(2 * 60 * 60),
+                    browse_xx(&mp, &c.target, &proxy_server),
+                )
+                .await
+                {
+                    Ok(r) => match r {
+                        Ok(_) => {
+                            info!("今天的学习强国就逛到这里了[{}]", &c.target);
+                        }
+                        Err(e) => {
+                            warn!("学习任务执行失败: [{}] {:?}", &c.target, e);
+                        }
+                    },
+                    Err(e) => {
+                        warn!("学习任务超时: [{}] {:?}", &c.target, e);
+                    }
+                };
+            }
+        }))
+    }
+    for handle in handles {
+        handle.await?;
+    }
     Ok(())
 }
