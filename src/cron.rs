@@ -7,7 +7,7 @@ use std::time::Duration;
 use study::browse_xx;
 use tokio::fs;
 use tokio::time::interval;
-use tracing::{info, trace, warn};
+use tracing::{info, instrument, trace, warn};
 
 pub async fn start_daily_score(conf_path: &str) -> Result<()> {
     let contents = fs::read_to_string(conf_path).await?;
@@ -80,46 +80,68 @@ pub async fn start_daily_study(conf_path: &str) -> Result<()> {
         let corp_secret = p.corp_secret.clone();
         let proxy_server = p.proxy_server.clone();
         handles.push(tokio::spawn(async move {
-            info!("学习开始");
-            let mut ticker = interval(Duration::from_secs(60));
-
-            let mp = wx::MP::new(&corp_id, &corp_secret, p.agent_id);
-
-            loop {
-                ticker.tick().await;
-                let d = Local::now();
-                if d.minute() == 30 {
-                    info!("继续等待任务开始执行");
-                }
-
-                if d.hour() != c.hour || d.minute() != c.minute {
-                    trace!("not time yet");
-                    continue;
-                }
-
-                match tokio::time::timeout(
-                    Duration::from_secs(2 * 60 * 60),
-                    browse_xx(&mp, &c.target, &proxy_server),
-                )
-                .await
-                {
-                    Ok(r) => match r {
-                        Ok(_) => {
-                            info!("今天的学习强国就逛到这里了[{}]", &c.target);
-                        }
-                        Err(e) => {
-                            warn!("学习任务执行失败: [{}] {:?}", &c.target, e);
-                        }
-                    },
-                    Err(e) => {
-                        warn!("学习任务超时: [{}] {:?}", &c.target, e);
-                    }
-                };
-            }
+            start_daily_study_schedule(
+                &corp_id,
+                &corp_secret,
+                p.agent_id,
+                c.hour,
+                c.minute,
+                &c.target,
+                &proxy_server,
+            )
+            .await;
         }))
     }
     for handle in handles {
         handle.await?;
     }
     Ok(())
+}
+
+#[instrument(skip_all, fields(user = %target))]
+async fn start_daily_study_schedule(
+    corp_id: &str,
+    corp_secret: &str,
+    agent_id: i64,
+    hour: u32,
+    minute: u32,
+    target: &str,
+    proxy_server: &Option<String>,
+) {
+    info!("每日学习任务已启动");
+    let mut ticker = interval(Duration::from_secs(60));
+
+    let mp = wx::MP::new(corp_id, corp_secret, agent_id);
+
+    loop {
+        ticker.tick().await;
+        let d = Local::now();
+        if d.minute() == 30 {
+            info!("继续等待任务开始执行");
+        }
+
+        if d.hour() != hour || d.minute() != minute {
+            trace!("not time yet");
+            continue;
+        }
+
+        match tokio::time::timeout(
+            Duration::from_secs(2 * 60 * 60),
+            browse_xx(&mp, target, proxy_server),
+        )
+        .await
+        {
+            Ok(r) => match r {
+                Ok(_) => {
+                    info!("今天的学习强国就逛到这里了");
+                }
+                Err(e) => {
+                    warn!("学习任务执行失败: {}", e);
+                }
+            },
+            Err(e) => {
+                warn!("学习任务超时: {}", e);
+            }
+        };
+    }
 }
