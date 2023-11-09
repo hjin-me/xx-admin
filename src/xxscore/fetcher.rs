@@ -109,7 +109,7 @@ async fn browse_xx(
     let proxy_server = proxy_server.as_ref().map(|s| s.as_str());
     let launch_options = LaunchOptions::default_builder()
         .path(Some(default_executable().map_err(|e| anyhow!(e))?))
-        .port(Some(8000))
+        // .port(Some(8000))
         .sandbox(false)
         .proxy_server(proxy_server)
         .idle_browser_timeout(Duration::from_secs(300))

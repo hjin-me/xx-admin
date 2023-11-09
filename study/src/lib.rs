@@ -18,7 +18,6 @@ fn new_browser(proxy_server: &Option<String>) -> Result<Browser> {
     let launch_options = LaunchOptions::default_builder()
         .path(Some(default_executable().map_err(|e| anyhow!(e))?))
         .window_size(Some((1920, 1080)))
-        .port(Some(8000))
         // .headless(false)
         .sandbox(false)
         .idle_browser_timeout(Duration::from_secs(300))
