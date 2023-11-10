@@ -120,6 +120,9 @@ async fn try_study<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &
                     if let Some(u) = news_iter.next() {
                         info!("开始阅读 {}", u);
                         browse_news(&browser, u).await?;
+                    } else {
+                        warn!("居然没有文章了，不知道怎么处理");
+                        time::sleep(Duration::from_secs(300)).await;
                     }
                 }
                 "我要视听学习" => {
@@ -134,6 +137,9 @@ async fn try_study<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &
                     if let Some(u) = video_iter.next() {
                         info!("开始观看视频 {}", u);
                         browse_video(&browser, u).await?;
+                    } else {
+                        warn!("居然没有视频了，不知道怎么处理");
+                        time::sleep(Duration::from_secs(300)).await;
                     }
                 }
                 _ => {
@@ -270,7 +276,7 @@ async fn browse_video(browser: &Browser, url: &str) -> Result<()> {
     tab.evaluate(play_js, false)?;
     let s = {
         let mut rng = thread_rng();
-        rng.gen_range(10..20)
+        rng.gen_range(130..260)
     };
     info!("观看视频 {} 秒", s);
     time::sleep(Duration::from_secs(s / 2)).await;
@@ -284,32 +290,32 @@ async fn browse_video(browser: &Browser, url: &str) -> Result<()> {
 #[derive(Serialize, Deserialize, Debug)]
 struct TodayTask {
     #[serde(rename = "displayRuleId")]
-    pub display_rule_id: String,
-    pub title: String,
-    pub sort: i64,
+    display_rule_id: String,
+    title: String,
+    sort: i64,
     #[serde(rename = "currentScore")]
-    pub current_score: i64,
+    current_score: i64,
     #[serde(rename = "dayMaxScore")]
-    pub day_max_score: i64,
+    day_max_score: i64,
     #[serde(rename = "taskCode")]
-    pub task_code: Vec<String>,
+    task_code: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Data {
     #[serde(rename = "userId")]
-    pub user_id: i64,
+    user_id: i64,
     #[serde(rename = "inBlackList")]
-    pub in_black_list: bool,
+    in_black_list: bool,
     #[serde(rename = "totalScore")]
-    pub total_score: i64,
+    total_score: i64,
     #[serde(rename = "taskProgress")]
-    pub task_progress: Vec<TodayTask>,
+    task_progress: Vec<TodayTask>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct TodayScoreRoot {
-    pub data: Data,
+    data: Data,
 }
 async fn get_today_score(browser: &Browser) -> Result<i64> {
     let tab = get_one_tab(browser)?;
@@ -391,9 +397,9 @@ async fn get_news_url(api: &str) -> Result<Vec<String>> {
         .filter(|n| n.audit_time.starts_with(&today))
         .map(|n| n.url.clone())
         .collect();
-    let mut rng = rand::thread_rng();
+    let mut rng = thread_rng();
     let shuffle: Vec<String> = r
-        .choose_multiple(&mut rng, 10)
+        .choose_multiple(&mut rng, 30)
         .map(|n| n.url.clone())
         .collect();
     latest.extend(shuffle);
