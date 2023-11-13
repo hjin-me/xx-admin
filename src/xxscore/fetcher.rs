@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::ops::Add;
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{info, warn};
+use tracing::{info, instrument, warn};
 use wx::{DropMsg, MsgApi, MP};
 
 #[async_trait]
@@ -99,6 +99,7 @@ pub struct OrganizationRank {
     pub pre_diff_score: f32,
 }
 
+#[instrument(skip(mp, proxy_server))]
 async fn browse_xx(
     login_user: &str,
     mp: &MP,
@@ -165,7 +166,7 @@ async fn try_browse_xx(
     }
     Err(anyhow!("经过{}次重试，未能成果获取积分", times))
 }
-
+#[instrument(skip(browser, mp))]
 async fn navigate_to_xx<T: MsgApi + Clone>(
     browser: &Browser,
     login_user: &str,
@@ -189,7 +190,7 @@ async fn navigate_to_xx<T: MsgApi + Clone>(
 
     Ok(tab)
 }
-
+#[instrument(skip(tab, mp))]
 async fn loop_login<T: MsgApi + Clone>(tab: &Arc<Tab>, login_user: &str, mp: &T) -> Result<()> {
     info!("等待二维码刷新");
     let img_data = wait_qr(&tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;

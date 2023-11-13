@@ -7,7 +7,7 @@ use std::time::Duration;
 use study::browse_xx;
 use tokio::fs;
 use tokio::time::interval;
-use tracing::{info, instrument, trace, warn};
+use tracing::{info, trace, warn};
 
 pub async fn start_daily_score(conf_path: &str) -> Result<()> {
     let contents = fs::read_to_string(conf_path).await?;
@@ -95,7 +95,7 @@ pub async fn start_daily_study(conf_path: &str) -> Result<()> {
     Ok(())
 }
 
-#[instrument(skip_all, fields(user = %target))]
+// #[instrument(skip_all, fields(user = %target))]
 async fn start_daily_study_schedule(
     corp_id: &str,
     corp_secret: &str,
@@ -113,9 +113,6 @@ async fn start_daily_study_schedule(
     loop {
         ticker.tick().await;
         let d = Local::now();
-        if d.minute() == 30 {
-            info!("继续等待任务开始执行");
-        }
 
         if d.hour() != hour || d.minute() != minute {
             trace!("not time yet");
@@ -140,5 +137,27 @@ async fn start_daily_study_schedule(
                 warn!("学习任务超时: {}", e);
             }
         };
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_study() -> Result<()> {
+        let _g = crate::otel::init_tracing_subscriber("xx-debug", "");
+        let contents = include_str!("../config.toml");
+        let p: StudyConfig = toml::from_str(contents)?;
+        start_daily_study_schedule(
+            &p.corp_id,
+            &p.corp_secret,
+            p.agent_id,
+            16,
+            42,
+            "",
+            &None,
+        )
+        .await;
+        Ok(())
     }
 }

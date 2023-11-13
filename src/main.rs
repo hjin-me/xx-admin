@@ -20,13 +20,15 @@ struct Args {
     config: String,
     #[arg(long, default_value = "admin")]
     cmd: String,
+    #[arg(long)]
+    otel: String,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    let _g = init_tracing_subscriber();
+    let _g = init_tracing_subscriber("ggs", &args.otel);
 
     let pwd = std::env::current_dir().unwrap();
     info!(conf_path = &args.config, cwd = ?pwd, "Starting up",);

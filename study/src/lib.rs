@@ -10,9 +10,10 @@ use std::ops::Add;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
-use tracing::{error, info, warn};
+use tracing::{error, info, instrument, warn};
 use wx::{DropMsg, MsgApi};
 
+#[instrument(skip_all)]
 fn new_browser(proxy_server: &Option<String>) -> Result<Browser> {
     let proxy_server = proxy_server.as_ref().map(|s| s.as_str());
     let launch_options = LaunchOptions::default_builder()
@@ -28,6 +29,7 @@ fn new_browser(proxy_server: &Option<String>) -> Result<Browser> {
     Ok(browser)
 }
 
+#[instrument(skip_all, fields(user = %login_user))]
 pub async fn browse_xx<T: MsgApi + Clone>(
     mp: &T,
     login_user: &str,
@@ -77,6 +79,7 @@ pub async fn browse_xx<T: MsgApi + Clone>(
     Ok(())
 }
 
+#[instrument(skip_all)]
 async fn study_report<T: MsgApi + Clone>(
     browser: &Browser,
     login_user: &str,
@@ -88,6 +91,7 @@ async fn study_report<T: MsgApi + Clone>(
         .await?;
     Ok(())
 }
+#[instrument(skip_all)]
 async fn try_study<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &T) -> Result<()> {
     let news_list = get_news_list().await?;
     let video_list = get_video_list().await?;
@@ -151,6 +155,7 @@ async fn try_study<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &
     study_report(browser, login_user, mp).await?;
     Ok(())
 }
+#[instrument(skip_all)]
 async fn try_login<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &T) -> Result<()> {
     reset_tabs(browser)?;
     let tab = get_one_tab(browser)?;
@@ -170,6 +175,7 @@ async fn try_login<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &
     time::sleep(Duration::from_secs(5)).await;
     Ok(())
 }
+#[instrument(skip_all)]
 async fn login<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &T) -> Result<()> {
     info!("遍历所有标签页，找到登陆标签");
     let tab = {
@@ -201,6 +207,7 @@ async fn login<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &T) -
     Ok(())
 }
 
+#[instrument(skip_all)]
 fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
     let el = tab
         .wait_for_element(".loginbox-inner")
@@ -217,6 +224,7 @@ fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
     )?;
     Ok(png_data)
 }
+#[instrument(skip_all)]
 async fn send_login_msg<T: MsgApi>(u: &str, img_data: &[u8], mp: &T) -> Result<(String, String)> {
     let before = chrono::Local::now().add(chrono::Duration::minutes(4));
     let m1 = mp.send_image_msg(u, img_data).await?;
@@ -231,6 +239,7 @@ async fn send_login_msg<T: MsgApi>(u: &str, img_data: &[u8], mp: &T) -> Result<(
     Ok((m1, m2))
 }
 
+#[instrument(skip(tab))]
 async fn scroll_to(tab: &Arc<Tab>, to: i64) -> Result<()> {
     info!("页面滚动一下");
     let smooth_scroll_js = include_str!("smooth_scroll.js");
@@ -244,6 +253,7 @@ async fn scroll_to(tab: &Arc<Tab>, to: i64) -> Result<()> {
     Ok(())
 }
 
+#[instrument(skip(browser))]
 async fn browse_news(browser: &Browser, url: &str) -> Result<()> {
     let tab = get_one_tab(browser)?;
     tab.activate()?;
@@ -265,6 +275,7 @@ async fn browse_news(browser: &Browser, url: &str) -> Result<()> {
     // tab.close(false)?;
     Ok(())
 }
+#[instrument(skip(browser))]
 async fn browse_video(browser: &Browser, url: &str) -> Result<()> {
     let tab = get_one_tab(browser)?;
     tab.activate()?;
@@ -317,6 +328,7 @@ struct Data {
 struct TodayScoreRoot {
     data: Data,
 }
+#[instrument(skip(browser))]
 async fn get_today_score(browser: &Browser) -> Result<i64> {
     let tab = get_one_tab(browser)?;
 
@@ -341,6 +353,7 @@ async fn get_today_score(browser: &Browser) -> Result<i64> {
     info!("今天学习总分为 {:?}", score_result);
     Ok(score_result)
 }
+#[instrument(skip(tab))]
 async fn get_today_tasks(tab: &Arc<Tab>) -> Result<Vec<TodayTask>> {
     info!("获取今日的学习任务");
     let js = include_str!("today_task.js");
@@ -374,16 +387,19 @@ struct News {
     url: String,
 }
 
+#[instrument(skip_all)]
 async fn get_news_list() -> Result<Vec<String>> {
     get_news_url("https://www.xuexi.cn/lgdata/1jscb6pu1n2.json")
         .await
         .map_err(|e| anyhow!("请求新闻列表失败: {}", e))
 }
+#[instrument(skip_all)]
 async fn get_video_list() -> Result<Vec<String>> {
     get_news_url("https://www.xuexi.cn/lgdata/3o3ufqgl8rsn.json")
         .await
         .map_err(|e| anyhow!("请求视频列表失败: {}", e))
 }
+#[instrument]
 async fn get_news_url(api: &str) -> Result<Vec<String>> {
     let resp = reqwest::get(api)
         .await
@@ -405,7 +421,7 @@ async fn get_news_url(api: &str) -> Result<Vec<String>> {
     latest.extend(shuffle);
     Ok(latest)
 }
-
+#[instrument(skip_all)]
 fn reset_tabs(browser: &Browser) -> Result<()> {
     // headless 模式 close 有问题，这样将就一下
     let tabs = browser.get_tabs().lock().unwrap();
@@ -414,6 +430,7 @@ fn reset_tabs(browser: &Browser) -> Result<()> {
     }
     Ok(())
 }
+#[instrument(skip_all)]
 fn get_one_tab(browser: &Browser) -> Result<Arc<Tab>> {
     let tabs = browser.get_tabs().lock().unwrap().clone();
     match tabs.into_iter().next() {
