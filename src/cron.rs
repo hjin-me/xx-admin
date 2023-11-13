@@ -28,9 +28,6 @@ pub async fn start_daily_score(conf_path: &str) -> Result<()> {
         loop {
             ticker.tick().await;
             let d = Local::now();
-            if d.minute() == 30 {
-                info!("继续等待任务开始执行");
-            }
 
             if d.hour() != p.exec_hour || d.minute() != p.exec_minute {
                 trace!("not time yet");
