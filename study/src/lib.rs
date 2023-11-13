@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use chrono::Local;
+use headless_chrome::browser::context::Context;
 use headless_chrome::browser::default_executable;
 use headless_chrome::protocol::cdp::Page;
 use headless_chrome::{Browser, LaunchOptions, Tab};
@@ -36,6 +37,7 @@ pub async fn browse_xx<T: MsgApi + Clone>(
     proxy_server: &Option<String>,
 ) -> Result<()> {
     let mut browser = new_browser(proxy_server)?;
+    let mut ctx = browser.new_context()?;
 
     let mut logined = false;
     for _ in 0..20 {
@@ -43,14 +45,15 @@ pub async fn browse_xx<T: MsgApi + Clone>(
             break;
         }
         {
-            if browser.get_tabs().lock().unwrap().iter().count() > 3 {
+            if ctx.get_tabs().unwrap().iter().count() > 3 {
                 drop(browser);
                 info!("哎，关不了 tab，只能关浏览器重启了");
                 browser = new_browser(proxy_server)?;
+                ctx = browser.new_context()?;
             }
         }
 
-        match try_login(&browser, login_user, mp).await {
+        match try_login(&ctx, login_user, mp).await {
             Ok(_) => logined = true,
             Err(e) => {
                 warn!("登陆失败: {:?}", e);
@@ -69,7 +72,7 @@ pub async fn browse_xx<T: MsgApi + Clone>(
         .map_err(|e| anyhow!("发送登陆成功消息失败: {}", e))?;
 
     for _ in 0..2 {
-        match try_study(&browser, login_user, mp).await {
+        match try_study(&ctx, login_user, mp).await {
             Ok(_) => break,
             Err(e) => {
                 warn!("学习失败: {:?}", e);
@@ -81,7 +84,7 @@ pub async fn browse_xx<T: MsgApi + Clone>(
 
 #[instrument(skip_all)]
 async fn study_report<T: MsgApi + Clone>(
-    browser: &Browser,
+    browser: &Context<'_>,
     login_user: &str,
     mp: &T,
 ) -> Result<()> {
@@ -92,7 +95,11 @@ async fn study_report<T: MsgApi + Clone>(
     Ok(())
 }
 #[instrument(skip_all)]
-async fn try_study<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &T) -> Result<()> {
+async fn try_study<T: MsgApi + Clone>(
+    browser: &Context<'_>,
+    login_user: &str,
+    mp: &T,
+) -> Result<()> {
     let news_list = get_news_list().await?;
     let video_list = get_video_list().await?;
     let mut news_iter = news_list.iter();
@@ -156,9 +163,9 @@ async fn try_study<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &
     Ok(())
 }
 #[instrument(skip_all)]
-async fn try_login<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &T) -> Result<()> {
-    reset_tabs(browser)?;
-    let tab = get_one_tab(browser)?;
+async fn try_login<T: MsgApi + Clone>(ctx: &Context<'_>, login_user: &str, mp: &T) -> Result<()> {
+    reset_tabs(&ctx)?;
+    let tab = get_one_tab(&ctx)?;
     tab.activate()?;
     tab.navigate_to("https://www.xuexi.cn/")
         .map_err(|e| anyhow!("打开学习页面失败: {}", e))?;
@@ -170,18 +177,17 @@ async fn try_login<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &
         info!("没有登陆");
         login_btn.click()?;
         time::sleep(Duration::from_secs(2)).await;
-        login(browser, login_user, mp).await?
+        login(&ctx, login_user, mp).await?
     }
     time::sleep(Duration::from_secs(5)).await;
     Ok(())
 }
 #[instrument(skip_all)]
-async fn login<T: MsgApi + Clone>(browser: &Browser, login_user: &str, mp: &T) -> Result<()> {
+async fn login<T: MsgApi + Clone>(browser: &Context<'_>, login_user: &str, mp: &T) -> Result<()> {
     info!("遍历所有标签页，找到登陆标签");
     let tab = {
         browser
             .get_tabs()
-            .lock()
             .unwrap()
             .clone()
             .into_iter()
@@ -254,7 +260,7 @@ async fn scroll_to(tab: &Arc<Tab>, to: i64) -> Result<()> {
 }
 
 #[instrument(skip(browser))]
-async fn browse_news(browser: &Browser, url: &str) -> Result<()> {
+async fn browse_news(browser: &Context<'_>, url: &str) -> Result<()> {
     let tab = get_one_tab(browser)?;
     tab.activate()?;
     tab.navigate_to(url)?;
@@ -276,7 +282,7 @@ async fn browse_news(browser: &Browser, url: &str) -> Result<()> {
     Ok(())
 }
 #[instrument(skip(browser))]
-async fn browse_video(browser: &Browser, url: &str) -> Result<()> {
+async fn browse_video(browser: &Context<'_>, url: &str) -> Result<()> {
     let tab = get_one_tab(browser)?;
     tab.activate()?;
     tab.navigate_to(url)?;
@@ -329,7 +335,7 @@ struct TodayScoreRoot {
     data: Data,
 }
 #[instrument(skip(browser))]
-async fn get_today_score(browser: &Browser) -> Result<i64> {
+async fn get_today_score(browser: &Context<'_>) -> Result<i64> {
     let tab = get_one_tab(browser)?;
 
     let js = include_str!("today_score.js");
@@ -422,17 +428,17 @@ async fn get_news_url(api: &str) -> Result<Vec<String>> {
     Ok(latest)
 }
 #[instrument(skip_all)]
-fn reset_tabs(browser: &Browser) -> Result<()> {
+fn reset_tabs(browser: &Context) -> Result<()> {
     // headless 模式 close 有问题，这样将就一下
-    let tabs = browser.get_tabs().lock().unwrap();
+    let tabs = browser.get_tabs().unwrap();
     for tab in tabs.iter() {
         tab.navigate_to("about:blank")?;
     }
     Ok(())
 }
 #[instrument(skip_all)]
-fn get_one_tab(browser: &Browser) -> Result<Arc<Tab>> {
-    let tabs = browser.get_tabs().lock().unwrap().clone();
+fn get_one_tab(browser: &Context) -> Result<Arc<Tab>> {
+    let tabs = browser.get_tabs().unwrap();
     match tabs.into_iter().next() {
         Some(tab) => Ok(tab),
         None => browser
@@ -457,6 +463,21 @@ mod test {
         let conf: Conf = serde_json::from_str(include_str!("../../wx/config.json"))?;
         let mp = MP::new(&conf.corp_id, &conf.corp_secret, conf.agent_id);
         dbg!(browse_xx(&mp, "SongSong", &None).await)?;
+        Ok(())
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_browser_close() -> Result<()> {
+        tracing_subscriber::fmt::init();
+        let b = new_browser(&None)?;
+        let c = b.new_context()?;
+        info!("open new tab");
+        let tab = c.new_tab()?;
+        time::sleep(Duration::from_secs(10)).await;
+        info!("will close tab");
+        drop(c);
+        tab.close(false)?;
+        info!("after close");
+        time::sleep(Duration::from_secs(10)).await;
         Ok(())
     }
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
