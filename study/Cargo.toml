@@ -6,16 +6,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.75"
-async-trait = "0.1.74"
-chrono = { version = "0.4.31", features = ["serde"] }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
 headless_chrome = "1.0.7"
 rand = "0.8.5"
-reqwest = { version = "0.11.22", features = ["json", "multipart"] }
-serde = "1.0.190"
+reqwest = { workspace = true, features = ["json", "multipart"] }
+serde = { workspace = true }
 serde_json = "1.0.108"
 tokio = { version = "1.33.0", features = ["full"] }
-tracing = "0.1.40"
+tracing = { workspace = true }
 
 wx = { path = "../wx" }
 

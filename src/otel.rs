@@ -36,7 +36,7 @@ fn init_tracer(name: &str, endpoint: &str) -> Tracer {
 pub fn init_tracing_subscriber(name: &str, endpoint: &str) -> OtelGuard {
     tracing_subscriber::registry()
         .with(tracing_subscriber::filter::LevelFilter::from_level(
-            Level::DEBUG,
+            Level::INFO,
         ))
         .with(tracing_subscriber::fmt::layer())
         .with(tracing_opentelemetry::layer().with_tracer(init_tracer(name, endpoint)))

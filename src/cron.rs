@@ -70,73 +70,54 @@ pub async fn start_daily_score(conf_path: &str) -> Result<()> {
 pub async fn start_daily_study(conf_path: &str) -> Result<()> {
     let contents = fs::read_to_string(conf_path).await?;
     let p: StudyConfig = toml::from_str(contents.as_str())?;
-    let mut handles = vec![];
-
-    for c in p.study_schedule {
-        let corp_id = p.corp_id.clone();
-        let corp_secret = p.corp_secret.clone();
-        let proxy_server = p.proxy_server.clone();
-        handles.push(tokio::spawn(async move {
-            start_daily_study_schedule(
-                &corp_id,
-                &corp_secret,
-                p.agent_id,
-                c.hour,
-                c.minute,
-                &c.target,
-                &proxy_server,
-            )
-            .await;
-        }))
-    }
-    for handle in handles {
-        handle.await?;
-    }
-    Ok(())
-}
-
-// #[instrument(skip_all, fields(user = %target))]
-async fn start_daily_study_schedule(
-    corp_id: &str,
-    corp_secret: &str,
-    agent_id: i64,
-    hour: u32,
-    minute: u32,
-    target: &str,
-    proxy_server: &Option<String>,
-) {
-    info!("每日学习任务已启动");
+    info!("开始每日学习任务");
     let mut ticker = interval(Duration::from_secs(60));
 
-    let mp = wx::MP::new(corp_id, corp_secret, agent_id);
+    let mp = wx::MP::new(&p.corp_id, &p.corp_secret, p.agent_id);
 
     loop {
         ticker.tick().await;
+        trace!("每分钟定时任务检查");
         let d = Local::now();
-
-        if d.hour() != hour || d.minute() != minute {
-            trace!("not time yet");
-            continue;
-        }
-
-        match tokio::time::timeout(
-            Duration::from_secs(2 * 60 * 60),
-            browse_xx(&mp, target, proxy_server),
-        )
-        .await
-        {
-            Ok(r) => match r {
-                Ok(_) => {
-                    info!("今天的学习强国就逛到这里了");
-                }
-                Err(e) => {
-                    warn!("学习任务执行失败: {}", e);
-                }
-            },
-            Err(e) => {
-                warn!("学习任务超时: {}", e);
-            }
+        let tasks = {
+            let contents = fs::read_to_string(conf_path).await?;
+            let p: StudyConfig = toml::from_str(contents.as_str())?;
+            p.study_schedule
         };
+
+        for x in tasks {
+            if x.hour != d.hour() || x.minute != d.minute() {
+                continue;
+            }
+            let proxy_server = p.proxy_server.clone();
+            let mp = mp.clone();
+            tokio::spawn(async move {
+                info!(
+                    user = &x.target,
+                    hour = x.hour,
+                    minute = x.minute,
+                    "时间到了，开始学习任务"
+                );
+                match tokio::time::timeout(
+                    Duration::from_secs(2 * 60 * 60),
+                    browse_xx(&mp, &x.target, &proxy_server),
+                )
+                .await
+                {
+                    Ok(r) => match r {
+                        Ok(_) => {
+                            info!("今天的学习强国就逛到这里了");
+                        }
+                        Err(e) => {
+                            warn!("学习任务执行失败: {}", e);
+                        }
+                    },
+                    Err(e) => {
+                        warn!("学习任务超时: {}", e);
+                    }
+                }
+            });
+        }
     }
 }
 
@@ -148,16 +129,7 @@ mod test {
         let _g = crate::otel::init_tracing_subscriber("xx-debug", "");
         let contents = include_str!("../config.toml");
         let p: StudyConfig = toml::from_str(contents)?;
-        start_daily_study_schedule(
-            &p.corp_id,
-            &p.corp_secret,
-            p.agent_id,
-            16,
-            42,
-            "",
-            &None,
-        )
-        .await;
+        // start_daily_study_schedule(&p.corp_id, &p.corp_secret, p.agent_id, 16, 42, "", &None).await;
         Ok(())
     }
 }

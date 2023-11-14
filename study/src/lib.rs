@@ -1,3 +1,6 @@
+mod eval;
+
+use crate::eval::{get_today_score, get_today_tasks, get_user_info, scroll_to};
 use anyhow::{anyhow, Result};
 use chrono::Local;
 use headless_chrome::browser::context::Context;
@@ -6,9 +9,10 @@ use headless_chrome::protocol::cdp::Page;
 use headless_chrome::{Browser, LaunchOptions, Tab};
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::ops::Add;
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 use tokio::time;
 use tracing::{error, info, instrument, warn};
@@ -40,12 +44,13 @@ pub async fn browse_xx<T: MsgApi + Clone>(
     let mut ctx = browser.new_context()?;
 
     let mut logined = false;
+    let mut nick_name = "".to_string();
     for _ in 0..20 {
         if logined {
             break;
         }
         {
-            if ctx.get_tabs().unwrap().iter().count() > 3 {
+            if ctx.get_tabs().unwrap().len() > 3 {
                 drop(browser);
                 info!("哎，关不了 tab，只能关浏览器重启了");
                 browser = new_browser(proxy_server)?;
@@ -54,7 +59,10 @@ pub async fn browse_xx<T: MsgApi + Clone>(
         }
 
         match try_login(&ctx, login_user, mp).await {
-            Ok(_) => logined = true,
+            Ok(n) => {
+                logined = true;
+                nick_name = n;
+            },
             Err(e) => {
                 warn!("登陆失败: {:?}", e);
             }
@@ -67,7 +75,7 @@ pub async fn browse_xx<T: MsgApi + Clone>(
             .map_err(|e| anyhow!("发送登陆失败消息失败: {}", e))?;
         return Err(anyhow!("经过20次重试，未能登陆"));
     }
-    mp.send_text_msg(login_user, "学习强国登陆成功")
+    mp.send_text_msg(login_user, &format!("Hi, {} 学习强国登陆成功", nick_name))
         .await
         .map_err(|e| anyhow!("发送登陆成功消息失败: {}", e))?;
 
@@ -88,7 +96,8 @@ async fn study_report<T: MsgApi + Clone>(
     login_user: &str,
     mp: &T,
 ) -> Result<()> {
-    let n = get_today_score(browser).await?;
+    let tab = get_one_tab(browser)?;
+    let n = get_today_score(&tab)?;
     info!("发送今日分数");
     mp.send_text_msg(login_user, &format!("今日学习强国分数是：{}", n))
         .await?;
@@ -107,12 +116,11 @@ async fn try_study<T: MsgApi + Clone>(
 
     loop {
         let tab = get_one_tab(browser)?;
-        let todo_tasks = get_today_tasks(&tab).await?;
-        if todo_tasks
+        let todo_tasks = get_today_tasks(&tab)?;
+        if !todo_tasks
             .iter()
             .filter(|e| e.title.as_str() == "我要选读文章" || e.title.as_str() == "我要视听学习")
-            .find(|e| e.day_max_score != e.current_score)
-            .is_none()
+            .any(|e| e.day_max_score != e.current_score)
         {
             info!("今日文章和视频任务完成");
             break;
@@ -130,7 +138,7 @@ async fn try_study<T: MsgApi + Clone>(
                     );
                     if let Some(u) = news_iter.next() {
                         info!("开始阅读 {}", u);
-                        browse_news(&browser, u).await?;
+                        browse_news(browser, u)?;
                     } else {
                         warn!("居然没有文章了，不知道怎么处理");
                         time::sleep(Duration::from_secs(300)).await;
@@ -147,7 +155,7 @@ async fn try_study<T: MsgApi + Clone>(
                     );
                     if let Some(u) = video_iter.next() {
                         info!("开始观看视频 {}", u);
-                        browse_video(&browser, u).await?;
+                        browse_video(browser, u)?;
                     } else {
                         warn!("居然没有视频了，不知道怎么处理");
                         time::sleep(Duration::from_secs(300)).await;
@@ -163,9 +171,13 @@ async fn try_study<T: MsgApi + Clone>(
     Ok(())
 }
 #[instrument(skip_all)]
-async fn try_login<T: MsgApi + Clone>(ctx: &Context<'_>, login_user: &str, mp: &T) -> Result<()> {
-    reset_tabs(&ctx)?;
-    let tab = get_one_tab(&ctx)?;
+async fn try_login<T: MsgApi + Clone>(
+    ctx: &Context<'_>,
+    login_user: &str,
+    mp: &T,
+) -> Result<String> {
+    reset_tabs(ctx)?;
+    let tab = get_one_tab(ctx)?;
     tab.activate()?;
     tab.navigate_to("https://www.xuexi.cn/")
         .map_err(|e| anyhow!("打开学习页面失败: {}", e))?;
@@ -177,10 +189,11 @@ async fn try_login<T: MsgApi + Clone>(ctx: &Context<'_>, login_user: &str, mp: &
         info!("没有登陆");
         login_btn.click()?;
         time::sleep(Duration::from_secs(2)).await;
-        login(&ctx, login_user, mp).await?
+        login(ctx, login_user, mp).await?
     }
     time::sleep(Duration::from_secs(5)).await;
-    Ok(())
+    let nick_name = get_user_info(&tab)?;
+    Ok(nick_name)
 }
 #[instrument(skip_all)]
 async fn login<T: MsgApi + Clone>(browser: &Context<'_>, login_user: &str, mp: &T) -> Result<()> {
@@ -218,7 +231,7 @@ fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
     let el = tab
         .wait_for_element(".loginbox-inner")
         .map_err(|e| anyhow!("没找到二维码: {}", e))?;
-    std::thread::sleep(Duration::from_secs(3));
+    thread::sleep(Duration::from_secs(3));
     let viewport = el.get_box_model()?.margin_viewport();
     el.scroll_into_view()?;
 
@@ -232,7 +245,7 @@ fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
 }
 #[instrument(skip_all)]
 async fn send_login_msg<T: MsgApi>(u: &str, img_data: &[u8], mp: &T) -> Result<(String, String)> {
-    let before = chrono::Local::now().add(chrono::Duration::minutes(4));
+    let before = Local::now().add(chrono::Duration::minutes(4));
     let m1 = mp.send_image_msg(u, img_data).await?;
 
     let m2 = mp
@@ -245,50 +258,36 @@ async fn send_login_msg<T: MsgApi>(u: &str, img_data: &[u8], mp: &T) -> Result<(
     Ok((m1, m2))
 }
 
-#[instrument(skip(tab))]
-async fn scroll_to(tab: &Arc<Tab>, to: i64) -> Result<()> {
-    info!("页面滚动一下");
-    let smooth_scroll_js = include_str!("smooth_scroll.js");
-
-    let body = tab
-        .wait_for_element("body")
-        .map_err(|e| anyhow!("没找到 body: {}", e))?;
-
-    let _remote_object = body.call_js_fn(smooth_scroll_js, vec![to.into()], false)?;
-    time::sleep(Duration::from_secs(2)).await;
-    Ok(())
-}
-
 #[instrument(skip(browser))]
-async fn browse_news(browser: &Context<'_>, url: &str) -> Result<()> {
+fn browse_news(browser: &Context<'_>, url: &str) -> Result<()> {
     let tab = get_one_tab(browser)?;
     tab.activate()?;
     tab.navigate_to(url)?;
-    time::sleep(Duration::from_secs(10)).await;
-    scroll_to(&tab, 394).await?;
+    thread::sleep(Duration::from_secs(10));
+    scroll_to(&tab, 394)?;
     let s = {
         let mut rng = thread_rng();
         rng.gen_range(80..110)
     };
     info!("阅读文章 {} 秒", s);
-    time::sleep(Duration::from_secs(s / 2)).await;
-    scroll_to(&tab, 1000).await?;
-    time::sleep(Duration::from_secs(s / 2)).await;
-    scroll_to(&tab, 3000).await?;
-    time::sleep(Duration::from_secs(10)).await;
-    scroll_to(&tab, 0).await?;
+    thread::sleep(Duration::from_secs(s / 2));
+    scroll_to(&tab, 1000)?;
+    thread::sleep(Duration::from_secs(s / 2));
+    scroll_to(&tab, 3000)?;
+    thread::sleep(Duration::from_secs(10));
+    scroll_to(&tab, 0)?;
     // headless 模式下，close 没有反应？
     // tab.close(false)?;
     Ok(())
 }
 #[instrument(skip(browser))]
-async fn browse_video(browser: &Context<'_>, url: &str) -> Result<()> {
+fn browse_video(browser: &Context<'_>, url: &str) -> Result<()> {
     let tab = get_one_tab(browser)?;
     tab.activate()?;
     tab.navigate_to(url)?;
     tab.wait_until_navigated()?;
-    time::sleep(Duration::from_secs(1)).await;
-    scroll_to(&tab, 394).await?;
+    thread::sleep(Duration::from_secs(1));
+    scroll_to(&tab, 394)?;
     let play_js = include_str!("play.js");
     tab.evaluate(play_js, false)?;
     let s = {
@@ -296,92 +295,12 @@ async fn browse_video(browser: &Context<'_>, url: &str) -> Result<()> {
         rng.gen_range(130..260)
     };
     info!("观看视频 {} 秒", s);
-    time::sleep(Duration::from_secs(s / 2)).await;
-    scroll_to(&tab, 500).await?;
-    time::sleep(Duration::from_secs(s / 2)).await;
-    scroll_to(&tab, 300).await?;
+    thread::sleep(Duration::from_secs(s / 2));
+    scroll_to(&tab, 500)?;
+    thread::sleep(Duration::from_secs(s / 2));
+    scroll_to(&tab, 300)?;
     // tab.close(false)?;
     Ok(())
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct TodayTask {
-    #[serde(rename = "displayRuleId")]
-    display_rule_id: String,
-    title: String,
-    sort: i64,
-    #[serde(rename = "currentScore")]
-    current_score: i64,
-    #[serde(rename = "dayMaxScore")]
-    day_max_score: i64,
-    #[serde(rename = "taskCode")]
-    task_code: Vec<String>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct Data {
-    #[serde(rename = "userId")]
-    user_id: i64,
-    #[serde(rename = "inBlackList")]
-    in_black_list: bool,
-    #[serde(rename = "totalScore")]
-    total_score: i64,
-    #[serde(rename = "taskProgress")]
-    task_progress: Vec<TodayTask>,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-struct TodayScoreRoot {
-    data: Data,
-}
-#[instrument(skip(browser))]
-async fn get_today_score(browser: &Context<'_>) -> Result<i64> {
-    let tab = get_one_tab(browser)?;
-
-    let js = include_str!("today_score.js");
-    let remote_obj = tab.evaluate(js, true)?;
-    let score_result = match remote_obj.value {
-        Some(serde_json::Value::Number(returned_num)) => {
-            let v = returned_num.as_i64().unwrap();
-            Ok(v)
-        }
-        Some(v) => {
-            warn!("执行脚本获取数据失败, {:?}", v);
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            Err(anyhow!("执行脚本获取数据失败"))
-        }
-        _ => {
-            warn!("执行脚本获取数据失败");
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            Err(anyhow!("执行脚本获取数据失败"))
-        }
-    }?;
-    info!("今天学习总分为 {:?}", score_result);
-    Ok(score_result)
-}
-#[instrument(skip(tab))]
-async fn get_today_tasks(tab: &Arc<Tab>) -> Result<Vec<TodayTask>> {
-    info!("获取今日的学习任务");
-    let js = include_str!("today_task.js");
-    let remote_obj = tab.evaluate(js, true)?;
-    let score_result = match remote_obj.value {
-        Some(serde_json::Value::String(returned_string)) => {
-            let v = serde_json::from_str::<TodayScoreRoot>(&returned_string)?;
-            Ok(v)
-        }
-        Some(v) => {
-            warn!("执行脚本获取数据失败, {:?}", v);
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            Err(anyhow!("执行脚本获取数据失败"))
-        }
-        _ => {
-            warn!("执行脚本获取数据失败");
-            tokio::time::sleep(Duration::from_secs(1)).await;
-            Err(anyhow!("执行脚本获取数据失败"))
-        }
-    }?;
-    info!("今天学习任务的进度是 {:?}", score_result);
-    Ok(score_result.data.task_progress)
 }
 
 #[derive(Deserialize, Debug)]
