@@ -16,7 +16,7 @@ use std::thread;
 use std::time::Duration;
 use tokio::time;
 use tracing::{error, info, instrument, warn};
-use wx::{DropMsg, MsgApi};
+use wx::{drop_msg_task, DropMsg, MsgApi, MP};
 
 #[instrument(skip_all)]
 fn new_browser(proxy_server: &Option<String>) -> Result<Browser> {
@@ -35,11 +35,7 @@ fn new_browser(proxy_server: &Option<String>) -> Result<Browser> {
 }
 
 #[instrument(skip_all, fields(user = %login_user))]
-pub async fn browse_xx<T: MsgApi + Clone>(
-    mp: &T,
-    login_user: &str,
-    proxy_server: &Option<String>,
-) -> Result<()> {
+pub async fn browse_xx(mp: &MP, login_user: &str, proxy_server: &Option<String>) -> Result<()> {
     let mut browser = new_browser(proxy_server)?;
     let mut ctx = browser.new_context()?;
 
@@ -62,7 +58,7 @@ pub async fn browse_xx<T: MsgApi + Clone>(
             Ok(n) => {
                 logined = true;
                 nick_name = n;
-            },
+            }
             Err(e) => {
                 warn!("登陆失败: {:?}", e);
             }
@@ -171,11 +167,7 @@ async fn try_study<T: MsgApi + Clone>(
     Ok(())
 }
 #[instrument(skip_all)]
-async fn try_login<T: MsgApi + Clone>(
-    ctx: &Context<'_>,
-    login_user: &str,
-    mp: &T,
-) -> Result<String> {
+async fn try_login(ctx: &Context<'_>, login_user: &str, mp: &MP) -> Result<String> {
     reset_tabs(ctx)?;
     let tab = get_one_tab(ctx)?;
     tab.activate()?;
@@ -196,7 +188,8 @@ async fn try_login<T: MsgApi + Clone>(
     Ok(nick_name)
 }
 #[instrument(skip_all)]
-async fn login<T: MsgApi + Clone>(browser: &Context<'_>, login_user: &str, mp: &T) -> Result<()> {
+async fn login(browser: &Context<'_>, login_user: &str, mp: &MP) -> Result<()> {
+    let tx = drop_msg_task(mp);
     info!("遍历所有标签页，找到登陆标签");
     let tab = {
         browser
@@ -212,7 +205,7 @@ async fn login<T: MsgApi + Clone>(browser: &Context<'_>, login_user: &str, mp: &
     info!("获取登陆二维码成功");
 
     let (m1, m2) = send_login_msg(login_user, &img_data, mp).await?;
-    let _dms = DropMsg::new(mp, vec![m1, m2]);
+    let _dms = DropMsg::new(tx, vec![m1, m2]);
     info!("发送登陆消息通知");
     match tab.wait_for_element_with_custom_timeout(".logged-text", Duration::from_secs(260)) {
         Ok(_) => {

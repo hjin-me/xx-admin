@@ -11,8 +11,9 @@ chrono = { workspace = true }
 reqwest = { workspace = true, features = ["json", "multipart"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = "1.0.108"
-tokio = { version = "1.33.0", features = ["sync", "macros"] }
+tokio = { version = "1.33.0", features = ["sync", "macros", "rt", "rt-multi-thread"] }
 tracing = { workspace = true }
 
 [dev-dependencies]
 assert-json-diff = "2.0.2"
+tracing-subscriber = "0.3.17"

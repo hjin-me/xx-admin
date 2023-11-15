@@ -1,6 +1,8 @@
 use anyhow::Result;
 use std::fmt;
 use std::fmt::Display;
+use std::sync::mpsc::Sender;
+
 #[async_trait::async_trait]
 pub trait MsgApi {
     async fn recall_msgs(&self, msgs: Vec<String>) -> Result<()>;
@@ -15,7 +17,7 @@ use crate::MP;
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::info;
+use tracing::{error, info};
 
 #[async_trait::async_trait]
 impl MsgApi for MP {
@@ -428,33 +430,66 @@ impl SendMsgReq {
     }
 }
 
-pub struct DropMsg<T>
-where
-    T: MsgApi + Clone,
-{
-    mp: T,
+pub struct DropMsg {
+    tx: Sender<String>,
     ms: Vec<String>,
 }
-impl<T: MsgApi + Clone> DropMsg<T> {
-    pub fn new(mp: &T, ms: Vec<String>) -> Self {
-        Self { mp: mp.clone(), ms }
+impl DropMsg {
+    pub fn new(tx: Sender<String>, ms: Vec<String>) -> Self {
+        Self { tx, ms }
     }
 }
 
-impl<T> Drop for DropMsg<T>
-where
-    T: MsgApi + Clone,
-{
+impl Drop for DropMsg {
     fn drop(&mut self) {
-        let ms = self.ms.clone();
-        let mp = self.mp.clone();
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(async move {
-                let mp = mp.clone();
-                let _ = mp.recall_msgs(ms).await;
-            });
-        });
+        for x in self.ms.clone() {
+            if let Err(e) = self.tx.send(x) {
+                error!("drop msg failed: {}", e)
+            }
+        }
     }
+}
+
+pub fn drop_msg_task(mp: &MP) -> Sender<String> {
+    let (tx, rx) = std::sync::mpsc::channel::<String>();
+
+    let mp_inner = mp.clone();
+
+    std::thread::spawn(move || {
+        info!("启动一个后台任务");
+        let r = match tokio::runtime::Runtime::new() {
+            Ok(r) => r,
+            Err(e) => {
+                error!("创建后台任务失败 {}", e);
+                return;
+            }
+        };
+
+        let mp_inner = mp_inner;
+        let mut h = vec![];
+
+        loop {
+            let s = match rx.recv() {
+                Ok(s) => s,
+                Err(e) => {
+                    info!("drop msg task recv closed: {}", e);
+                    break;
+                }
+            };
+            info!("消费到了一条需要撤回的消息: {}", s);
+            let mp = mp_inner.clone();
+            h.push(r.spawn(async move {
+                info!("撤回结果: {:?}", mp.recall_msgs(vec![s]).await);
+            }));
+        }
+        r.block_on(async move {
+            for x in h {
+                _ = x.await;
+            }
+        });
+        info!("后台撤回任务结束");
+    });
+    tx
 }
 
 #[cfg(test)]

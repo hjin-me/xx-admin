@@ -8,7 +8,7 @@ use std::ops::Add;
 use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, instrument, warn};
-use wx::{DropMsg, MsgApi, MP};
+use wx::{drop_msg_task, DropMsg, MsgApi, MP};
 
 #[async_trait]
 pub trait Fetcher {
@@ -167,11 +167,7 @@ async fn try_browse_xx(
     Err(anyhow!("经过{}次重试，未能成果获取积分", times))
 }
 #[instrument(skip(browser, mp))]
-async fn navigate_to_xx<T: MsgApi + Clone>(
-    browser: &Browser,
-    login_user: &str,
-    mp: &T,
-) -> Result<Arc<Tab>> {
+async fn navigate_to_xx(browser: &Browser, login_user: &str, mp: &MP) -> Result<Arc<Tab>> {
     let tab = browser
         .new_tab()
         .map_err(|e| anyhow!("创建新标签页失败: {}", e))?;
@@ -191,12 +187,13 @@ async fn navigate_to_xx<T: MsgApi + Clone>(
     Ok(tab)
 }
 #[instrument(skip(tab, mp))]
-async fn loop_login<T: MsgApi + Clone>(tab: &Arc<Tab>, login_user: &str, mp: &T) -> Result<()> {
+async fn loop_login(tab: &Arc<Tab>, login_user: &str, mp: &MP) -> Result<()> {
+    let tx = drop_msg_task(mp);
     info!("等待二维码刷新");
-    let img_data = wait_qr(&tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;
+    let img_data = wait_qr(tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;
     info!("获取登陆二维码成功");
     let (m1, m2) = send_login_msg(login_user, &img_data, mp).await?;
-    let _dms = DropMsg::new(mp, vec![m1, m2]);
+    let _dms = DropMsg::new(tx, vec![m1, m2]);
     info!("已发送登陆通知");
     let btn = tab
         .wait_for_element_with_custom_timeout("form button", Duration::from_secs(260))
