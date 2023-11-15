@@ -1,6 +1,8 @@
 mod eval;
+mod qrcode;
 
 use crate::eval::{get_today_score, get_today_tasks, get_user_info, scroll_to};
+use crate::qrcode::decode_qr;
 use anyhow::{anyhow, Result};
 use chrono::Local;
 use headless_chrome::browser::context::Context;
@@ -36,7 +38,12 @@ fn new_browser(proxy_server: &Option<String>) -> Result<Browser> {
 }
 
 #[instrument(skip_all, fields(user = %login_user))]
-pub async fn browse_xx(mp: &MP, login_user: &str, proxy_server: &Option<String>) -> Result<()> {
+pub async fn browse_xx(
+    mp: &MP,
+    login_user: &str,
+    proxy_server: &Option<String>,
+    app_caller: &str,
+) -> Result<()> {
     let mut browser = new_browser(proxy_server)?;
     let mut ctx = browser.new_context()?;
 
@@ -56,7 +63,7 @@ pub async fn browse_xx(mp: &MP, login_user: &str, proxy_server: &Option<String>)
             }
         }
 
-        match try_login(&ctx, login_user, mp).await {
+        match try_login(&ctx, login_user, mp, app_caller).await {
             Ok(n) => {
                 logined = true;
                 nick_name = n;
@@ -175,7 +182,12 @@ async fn try_study(browser: &Context<'_>) -> Result<()> {
     Ok(())
 }
 #[instrument(skip_all)]
-async fn try_login(ctx: &Context<'_>, login_user: &str, mp: &MP) -> Result<String> {
+async fn try_login(
+    ctx: &Context<'_>,
+    login_user: &str,
+    mp: &MP,
+    app_caller: &str,
+) -> Result<String> {
     reset_tabs(ctx)?;
     let tab = get_one_tab(ctx)?;
     tab.activate()?;
@@ -189,14 +201,14 @@ async fn try_login(ctx: &Context<'_>, login_user: &str, mp: &MP) -> Result<Strin
         debug!("没有登陆");
         login_btn.click()?;
         time::sleep(Duration::from_secs(2)).await;
-        login(ctx, login_user, mp).await?
+        login(ctx, login_user, mp, app_caller).await?
     }
     time::sleep(Duration::from_secs(5)).await;
     let nick_name = get_user_info(&tab)?;
     Ok(nick_name)
 }
 #[instrument(skip_all)]
-async fn login(browser: &Context<'_>, login_user: &str, mp: &MP) -> Result<()> {
+async fn login(browser: &Context<'_>, login_user: &str, mp: &MP, app_caller: &str) -> Result<()> {
     let tx = drop_msg_task(mp);
     trace!("遍历所有标签页，找到登陆标签");
     let tab = {
@@ -211,9 +223,13 @@ async fn login(browser: &Context<'_>, login_user: &str, mp: &MP) -> Result<()> {
     debug!("等待二维码刷新");
     let img_data = wait_qr(&tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;
     trace!("获取登陆二维码成功");
+    let login_url = decode_qr(&img_data)?;
+    let mut app_caller = app_caller.to_string();
+    app_caller.extend(form_urlencoded::byte_serialize(login_url.as_bytes()));
+    let login_url = app_caller.as_str();
 
-    let (m1, m2) = send_login_msg(login_user, &img_data, mp).await?;
-    let _dms = DropMsg::new(tx, vec![m1, m2]);
+    let msgs = send_login_msg(login_user, &img_data, &login_url, mp).await?;
+    let _dms = DropMsg::new(tx, msgs);
     trace!("发送登陆消息通知");
     match tab.wait_for_element_with_custom_timeout(".logged-text", Duration::from_secs(260)) {
         Ok(_) => {
@@ -245,18 +261,27 @@ fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
     Ok(png_data)
 }
 #[instrument(skip_all)]
-async fn send_login_msg<T: MsgApi>(u: &str, img_data: &[u8], mp: &T) -> Result<(String, String)> {
+async fn send_login_msg<T: MsgApi>(
+    u: &str,
+    img_data: &[u8],
+    login_url: &str,
+    mp: &T,
+) -> Result<Vec<String>> {
     let before = Local::now().add(chrono::Duration::minutes(4));
     let m1 = mp.send_image_msg(u, img_data).await?;
 
     let m2 = mp
         .send_text_msg(
             u,
-            &format!("学习强国扫码登陆，{} 前效", before.format("%H:%M:%S")),
+            &format!(
+                "点击链接\n{}\n或\n打开学习强国扫码登陆\n{} 前效",
+                login_url,
+                before.format("%H:%M:%S")
+            ),
         )
         .await?;
 
-    Ok((m1, m2))
+    Ok(vec![m1, m2])
 }
 
 #[instrument(skip(browser))]
@@ -375,6 +400,8 @@ mod test {
         corp_id: String,
         corp_secret: String,
         agent_id: i64,
+        to_user: String,
+        app_caller: String,
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -382,7 +409,7 @@ mod test {
         tracing_subscriber::fmt::init();
         let conf: Conf = serde_json::from_str(include_str!("../../wx/config.json"))?;
         let mp = MP::new(&conf.corp_id, &conf.corp_secret, conf.agent_id);
-        dbg!(browse_xx(&mp, "SongSong", &None).await)?;
+        dbg!(browse_xx(&mp, &conf.to_user, &None, &conf.app_caller).await)?;
         Ok(())
     }
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -429,5 +456,14 @@ mod test {
             info!("tab 数量 {}", tabs.iter().count());
         }
         Ok(())
+    }
+
+    #[test]
+    fn test_url_encode() {
+        let u = "https://login.xuexi.cn/login/qrcommit?showmenu=false&code=qr:20E71282-1C90-4745-8FBA-CA019E6E33B7&appId=dingoankubyrfkttorhpou";
+        let target_u ="https%3A%2F%2Flogin.xuexi.cn%2Flogin%2Fqrcommit%3Fshowmenu%3Dfalse%26code%3Dqr%3A20E71282-1C90-4745-8FBA-CA019E6E33B7%26appId%3Ddingoankubyrfkttorhpou";
+        let mut s = "".to_string();
+        s.extend(form_urlencoded::byte_serialize(u.as_bytes()));
+        assert_eq!(s.as_str(), target_u);
     }
 }

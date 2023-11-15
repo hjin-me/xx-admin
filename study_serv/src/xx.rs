@@ -6,6 +6,7 @@ pub struct StudyConfig {
     pub corp_id: String,
     pub corp_secret: String,
     pub agent_id: i64,
+    pub app_caller: String,
 }
 pub async fn run() -> Result<()> {
     info!("{:?}", tokio::runtime::Handle::current().runtime_flavor());
@@ -13,8 +14,15 @@ pub async fn run() -> Result<()> {
     let p: StudyConfig = toml::from_str(contents)?;
     tokio::runtime::Runtime::new()?
         .spawn(async move {
-            start_daily_study_schedule(&p.corp_id, &p.corp_secret, p.agent_id, "SongSong", &None)
-                .await;
+            start_daily_study_schedule(
+                &p.corp_id,
+                &p.corp_secret,
+                p.agent_id,
+                "",
+                &None,
+                &p.app_caller,
+            )
+            .await;
         })
         .await?;
     Ok(())
@@ -26,6 +34,7 @@ async fn start_daily_study_schedule(
     agent_id: i64,
     target: &str,
     proxy_server: &Option<String>,
+    app_caller: &str,
 ) {
     info!("每日学习任务已启动");
     let r = tokio::runtime::Runtime::new().unwrap();
@@ -33,11 +42,12 @@ async fn start_daily_study_schedule(
     let corp_secret = corp_secret.to_string();
     let target = target.to_string();
     let proxy_server = proxy_server.clone();
+    let app_caller = app_caller.to_string();
     let _ = r
         .spawn(async move {
             let mp = wx::MP::new(corp_id.as_str(), corp_secret.as_str(), agent_id);
 
-            match study::browse_xx(&mp, target.as_str(), &proxy_server).await {
+            match study::browse_xx(&mp, target.as_str(), &proxy_server, &app_caller).await {
                 Ok(_) => {
                     info!("今天的学习强国就逛到这里了");
                 }

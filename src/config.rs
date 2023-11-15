@@ -18,6 +18,7 @@ pub struct AdminConfig {
 pub struct StudyConfig {
     pub proxy_server: Option<String>,  // 代理服务器地址
     pub study_schedule: Vec<Schedule>, // 学习计划
+    pub app_caller: String,
 
     pub corp_id: String,
     pub corp_secret: String,

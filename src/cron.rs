@@ -90,6 +90,7 @@ pub async fn start_daily_study(conf_path: &str) -> Result<()> {
                 continue;
             }
             let proxy_server = p.proxy_server.clone();
+            let app_caller = p.app_caller.clone();
             let mp = mp.clone();
             std::thread::spawn(move || {
                 let r = match tokio::runtime::Runtime::new() {
@@ -108,7 +109,7 @@ pub async fn start_daily_study(conf_path: &str) -> Result<()> {
                     );
                     match tokio::time::timeout(
                         Duration::from_secs(2 * 60 * 60),
-                        browse_xx(&mp, &x.target, &proxy_server),
+                        browse_xx(&mp, &x.target, &proxy_server, &app_caller),
                     )
                     .await
                     {
