@@ -20,6 +20,7 @@ use wx::{drop_msg_task, DropMsg, MsgApi, MP};
 
 #[instrument(skip_all)]
 fn new_browser(proxy_server: &Option<String>) -> Result<Browser> {
+    trace!("准备启动浏览器");
     let proxy_server = proxy_server.as_ref().map(|s| s.as_str());
     let launch_options = LaunchOptions::default_builder()
         .path(Some(default_executable().map_err(|e| anyhow!(e))?))
@@ -39,7 +40,7 @@ pub async fn browse_xx(mp: &MP, login_user: &str, proxy_server: &Option<String>)
     let mut browser = new_browser(proxy_server)?;
     let mut ctx = browser.new_context()?;
 
-    debug!("等待用户登陆");
+    info!(user = login_user, "等待用户登陆");
     let mut logined = false;
     let mut nick_name = "".to_string();
     for _ in 0..20 {

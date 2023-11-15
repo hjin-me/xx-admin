@@ -77,8 +77,8 @@ pub async fn start_daily_study(conf_path: &str) -> Result<()> {
 
     loop {
         ticker.tick().await;
-        trace!("每分钟定时任务检查");
         let d = Local::now();
+        trace!("每分钟定时任务检查 {}", d.format("%H:%M:%S"));
         let tasks = {
             let contents = fs::read_to_string(conf_path).await?;
             let p: StudyConfig = toml::from_str(contents.as_str())?;
@@ -91,31 +91,40 @@ pub async fn start_daily_study(conf_path: &str) -> Result<()> {
             }
             let proxy_server = p.proxy_server.clone();
             let mp = mp.clone();
-            tokio::spawn(async move {
-                info!(
-                    user = &x.target,
-                    hour = x.hour,
-                    minute = x.minute,
-                    "时间到了，开始学习任务"
-                );
-                match tokio::time::timeout(
-                    Duration::from_secs(2 * 60 * 60),
-                    browse_xx(&mp, &x.target, &proxy_server),
-                )
-                .await
-                {
-                    Ok(r) => match r {
-                        Ok(_) => {
-                            info!(user = x.target, "今天的学习强国就逛到这里了");
-                        }
-                        Err(e) => {
-                            warn!(user = x.target, "学习任务执行失败: {}", e);
-                        }
-                    },
+            std::thread::spawn(move || {
+                let r = match tokio::runtime::Runtime::new() {
+                    Ok(r) => r,
                     Err(e) => {
-                        warn!(user = x.target, "学习任务超时: {}", e);
+                        warn!("创建 tokio runtime 失败: {}", e);
+                        return;
                     }
-                }
+                };
+                r.block_on(async move {
+                    info!(
+                        user = &x.target,
+                        hour = x.hour,
+                        minute = x.minute,
+                        "时间到了，开始学习任务"
+                    );
+                    match tokio::time::timeout(
+                        Duration::from_secs(2 * 60 * 60),
+                        browse_xx(&mp, &x.target, &proxy_server),
+                    )
+                    .await
+                    {
+                        Ok(r) => match r {
+                            Ok(_) => {
+                                info!(user = x.target, "今天的学习强国就逛到这里了");
+                            }
+                            Err(e) => {
+                                warn!(user = x.target, "学习任务执行失败: {}", e);
+                            }
+                        },
+                        Err(e) => {
+                            warn!(user = x.target, "学习任务超时: {}", e);
+                        }
+                    }
+                });
             });
         }
     }
