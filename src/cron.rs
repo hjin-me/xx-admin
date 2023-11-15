@@ -70,7 +70,7 @@ pub async fn start_daily_score(conf_path: &str) -> Result<()> {
 pub async fn start_daily_study(conf_path: &str) -> Result<()> {
     let contents = fs::read_to_string(conf_path).await?;
     let p: StudyConfig = toml::from_str(contents.as_str())?;
-    info!("开始每日学习任务");
+    info!("学习任务定时任务已启动");
     let mut ticker = interval(Duration::from_secs(60));
 
     let mp = wx::MP::new(&p.corp_id, &p.corp_secret, p.agent_id);
@@ -106,14 +106,14 @@ pub async fn start_daily_study(conf_path: &str) -> Result<()> {
                 {
                     Ok(r) => match r {
                         Ok(_) => {
-                            info!("今天的学习强国就逛到这里了");
+                            info!(user = x.target, "今天的学习强国就逛到这里了");
                         }
                         Err(e) => {
-                            warn!("学习任务执行失败: {}", e);
+                            warn!(user = x.target, "学习任务执行失败: {}", e);
                         }
                     },
                     Err(e) => {
-                        warn!("学习任务超时: {}", e);
+                        warn!(user = x.target, "学习任务超时: {}", e);
                     }
                 }
             });

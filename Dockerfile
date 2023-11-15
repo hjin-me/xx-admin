@@ -7,4 +7,5 @@ RUN cargo build --release
 FROM hjin/chrome:20231106065551772b5a
 COPY --from=builder /build/target/release/xx-admin /usr/local/bin/xx-admin
 ENV CHROME /usr/bin/google-chrome
+ENV RUST_LOG warn,xx_admin=info,wx=info,study=info
 ENTRYPOINT ["xx-admin"]

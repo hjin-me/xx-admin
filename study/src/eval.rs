@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use tracing::{info, instrument, warn};
+use tracing::{debug, instrument, trace, warn};
 
 #[derive(Deserialize, Debug)]
 pub struct UserInfo {
@@ -20,7 +20,7 @@ struct UserInfoResp {
 
 #[instrument(skip(tab))]
 pub fn get_user_info(tab: &Arc<Tab>) -> Result<String> {
-    info!("获取当前用户名");
+    trace!("获取当前用户名");
     let js = include_str!("info.js");
     let remote_obj = tab.evaluate(js, true)?;
     let result = match remote_obj.value {
@@ -44,7 +44,7 @@ pub fn get_user_info(tab: &Arc<Tab>) -> Result<String> {
 
 #[instrument(skip(tab))]
 pub fn scroll_to(tab: &Arc<Tab>, to: i64) -> Result<()> {
-    info!("页面滚动一下");
+    trace!("页面滚动一下");
     let smooth_scroll_js = include_str!("smooth_scroll.js");
 
     let body = tab
@@ -76,7 +76,7 @@ pub fn get_today_score(tab: &Arc<Tab>) -> Result<i64> {
             Err(anyhow!("执行脚本获取数据失败"))
         }
     }?;
-    info!("今天学习总分为 {:?}", score_result);
+    debug!("今天学习总分为 {:?}", score_result);
     Ok(score_result)
 }
 
@@ -112,7 +112,7 @@ struct TodayScoreRoot {
 }
 #[instrument(skip(tab))]
 pub fn get_today_tasks(tab: &Arc<Tab>) -> Result<Vec<TodayTask>> {
-    info!("获取今日的学习任务");
+    trace!("获取今日的学习任务");
     let js = include_str!("today_task.js");
     let remote_obj = tab.evaluate(js, true)?;
     let score_result = match remote_obj.value {
@@ -131,6 +131,6 @@ pub fn get_today_tasks(tab: &Arc<Tab>) -> Result<Vec<TodayTask>> {
             Err(anyhow!("执行脚本获取数据失败"))
         }
     }?;
-    info!("今天学习任务的进度是 {:?}", score_result);
+    debug!("今天学习任务的进度是 {:?}", score_result);
     Ok(score_result.data.task_progress)
 }

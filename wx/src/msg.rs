@@ -17,7 +17,7 @@ use crate::MP;
 use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::{error, info};
+use tracing::{debug, error, trace};
 
 #[async_trait::async_trait]
 impl MsgApi for MP {
@@ -75,7 +75,7 @@ impl MsgApi for MP {
             )
         })?;
 
-        info!("上传图片， [{}]{:?}", resp_status, &data);
+        debug!("上传图片， [{}]{:?}", resp_status, &data);
 
         self.send_msg(SendMsgReq::Image(SendImageMsgReq {
             common: SendMsgCommon {
@@ -137,7 +137,7 @@ impl MsgApi for MP {
             }))
             .send()
             .await?;
-        info!(
+        debug!(
             "企业微信机器人返回 bot resp: [{}]{:?}",
             resp.status(),
             resp.text().await?
@@ -166,7 +166,7 @@ impl MsgApi for MP {
                 data_raw
             )
         })?;
-        info!("发送消息, [{}]{:?}", resp_status, data);
+        debug!("发送消息, [{}]{:?}", resp_status, data);
         Ok(data.msg_id)
     }
 }
@@ -456,7 +456,7 @@ pub fn drop_msg_task(mp: &MP) -> Sender<String> {
     let mp_inner = mp.clone();
 
     std::thread::spawn(move || {
-        info!("启动一个后台任务");
+        debug!("启动一个后台任务");
         let r = match tokio::runtime::Runtime::new() {
             Ok(r) => r,
             Err(e) => {
@@ -472,14 +472,21 @@ pub fn drop_msg_task(mp: &MP) -> Sender<String> {
             let s = match rx.recv() {
                 Ok(s) => s,
                 Err(e) => {
-                    info!("drop msg task recv closed: {}", e);
+                    trace!("drop msg task recv closed: {}", e);
                     break;
                 }
             };
-            info!("消费到了一条需要撤回的消息: {}", s);
+            trace!("消费到了一条需要撤回的消息: {}", s);
             let mp = mp_inner.clone();
             h.push(r.spawn(async move {
-                info!("撤回结果: {:?}", mp.recall_msgs(vec![s]).await);
+                match mp.recall_msgs(vec![s.clone()]).await {
+                    Ok(_) => {
+                        trace!(msg_id = s.clone(), "撤回成功");
+                    }
+                    Err(e) => {
+                        error!(msg_id = s.clone(), "撤回失败: {}", e)
+                    }
+                }
             }));
         }
         r.block_on(async move {
@@ -487,7 +494,7 @@ pub fn drop_msg_task(mp: &MP) -> Sender<String> {
                 _ = x.await;
             }
         });
-        info!("后台撤回任务结束");
+        debug!("后台撤回任务结束");
     });
     tx
 }

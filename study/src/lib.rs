@@ -15,7 +15,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tokio::time;
-use tracing::{error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 use wx::{drop_msg_task, DropMsg, MsgApi, MP};
 
 #[instrument(skip_all)]
@@ -39,6 +39,7 @@ pub async fn browse_xx(mp: &MP, login_user: &str, proxy_server: &Option<String>)
     let mut browser = new_browser(proxy_server)?;
     let mut ctx = browser.new_context()?;
 
+    debug!("等待用户登陆");
     let mut logined = false;
     let mut nick_name = "".to_string();
     for _ in 0..20 {
@@ -48,7 +49,7 @@ pub async fn browse_xx(mp: &MP, login_user: &str, proxy_server: &Option<String>)
         {
             if ctx.get_tabs().unwrap().len() > 3 {
                 drop(browser);
-                info!("哎，关不了 tab，只能关浏览器重启了");
+                trace!("哎，关不了 tab，只能关浏览器重启了");
                 browser = new_browser(proxy_server)?;
                 ctx = browser.new_context()?;
             }
@@ -71,15 +72,25 @@ pub async fn browse_xx(mp: &MP, login_user: &str, proxy_server: &Option<String>)
             .map_err(|e| anyhow!("发送登陆失败消息失败: {}", e))?;
         return Err(anyhow!("经过20次重试，未能登陆"));
     }
+    trace!(nick = nick_name, user = login_user, "登陆成功");
     mp.send_text_msg(login_user, &format!("Hi, {} 学习强国登陆成功", nick_name))
         .await
         .map_err(|e| anyhow!("发送登陆成功消息失败: {}", e))?;
 
     for _ in 0..2 {
-        match try_study(&ctx, login_user, mp).await {
-            Ok(_) => break,
+        match try_study(&ctx).await {
+            Ok(_) => {
+                let n = study_report(&ctx, login_user, mp).await?;
+                info!(
+                    nick = nick_name,
+                    user = login_user,
+                    score = n,
+                    "今日学习成功"
+                );
+                break;
+            }
             Err(e) => {
-                warn!("学习失败: {:?}", e);
+                warn!(nick = nick_name, user = login_user, "学习失败: {:?}", e);
             }
         };
     }
@@ -91,20 +102,16 @@ async fn study_report<T: MsgApi + Clone>(
     browser: &Context<'_>,
     login_user: &str,
     mp: &T,
-) -> Result<()> {
+) -> Result<i64> {
     let tab = get_one_tab(browser)?;
     let n = get_today_score(&tab)?;
-    info!("发送今日分数");
+    trace!(user = login_user, score = n, "发送今日分数");
     mp.send_text_msg(login_user, &format!("今日学习强国分数是：{}", n))
         .await?;
-    Ok(())
+    Ok(n)
 }
 #[instrument(skip_all)]
-async fn try_study<T: MsgApi + Clone>(
-    browser: &Context<'_>,
-    login_user: &str,
-    mp: &T,
-) -> Result<()> {
+async fn try_study(browser: &Context<'_>) -> Result<()> {
     let news_list = get_news_list().await?;
     let video_list = get_video_list().await?;
     let mut news_iter = news_list.iter();
@@ -118,14 +125,14 @@ async fn try_study<T: MsgApi + Clone>(
             .filter(|e| e.title.as_str() == "我要选读文章" || e.title.as_str() == "我要视听学习")
             .any(|e| e.day_max_score != e.current_score)
         {
-            info!("今日文章和视频任务完成");
+            debug!("今日文章和视频任务完成");
             break;
         }
         for task in todo_tasks {
             match task.title.as_str() {
                 "我要选读文章" => {
                     if task.day_max_score == task.current_score {
-                        info!("今日阅读任务完成");
+                        debug!("今日阅读任务完成");
                         continue;
                     }
                     info!(
@@ -133,7 +140,7 @@ async fn try_study<T: MsgApi + Clone>(
                         task.current_score, task.day_max_score
                     );
                     if let Some(u) = news_iter.next() {
-                        info!("开始阅读 {}", u);
+                        debug!("开始阅读 {}", u);
                         browse_news(browser, u)?;
                     } else {
                         warn!("居然没有文章了，不知道怎么处理");
@@ -142,7 +149,7 @@ async fn try_study<T: MsgApi + Clone>(
                 }
                 "我要视听学习" => {
                     if task.day_max_score == task.current_score {
-                        info!("今日视频任务完成");
+                        debug!("今日视频任务完成");
                         continue;
                     }
                     info!(
@@ -150,7 +157,7 @@ async fn try_study<T: MsgApi + Clone>(
                         task.current_score, task.day_max_score
                     );
                     if let Some(u) = video_iter.next() {
-                        info!("开始观看视频 {}", u);
+                        debug!("开始观看视频 {}", u);
                         browse_video(browser, u)?;
                     } else {
                         warn!("居然没有视频了，不知道怎么处理");
@@ -158,12 +165,12 @@ async fn try_study<T: MsgApi + Clone>(
                     }
                 }
                 _ => {
-                    info!("不知道怎么处理这个任务: {:?}", task);
+                    debug!("不知道怎么处理这个任务: {:?}", task);
                 }
             }
         }
     }
-    study_report(browser, login_user, mp).await?;
+
     Ok(())
 }
 #[instrument(skip_all)]
@@ -178,7 +185,7 @@ async fn try_login(ctx: &Context<'_>, login_user: &str, mp: &MP) -> Result<Strin
     tokio::time::sleep(Duration::from_secs(1)).await;
 
     if let Ok(login_btn) = tab.wait_for_element(".login a.login-icon") {
-        info!("没有登陆");
+        debug!("没有登陆");
         login_btn.click()?;
         time::sleep(Duration::from_secs(2)).await;
         login(ctx, login_user, mp).await?
@@ -190,7 +197,7 @@ async fn try_login(ctx: &Context<'_>, login_user: &str, mp: &MP) -> Result<Strin
 #[instrument(skip_all)]
 async fn login(browser: &Context<'_>, login_user: &str, mp: &MP) -> Result<()> {
     let tx = drop_msg_task(mp);
-    info!("遍历所有标签页，找到登陆标签");
+    trace!("遍历所有标签页，找到登陆标签");
     let tab = {
         browser
             .get_tabs()
@@ -200,16 +207,16 @@ async fn login(browser: &Context<'_>, login_user: &str, mp: &MP) -> Result<()> {
             .find(|t| t.get_url().contains("login.html"))
             .ok_or(anyhow!("没有找到登陆标签页"))?
     };
-    info!("等待二维码刷新");
+    debug!("等待二维码刷新");
     let img_data = wait_qr(&tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;
-    info!("获取登陆二维码成功");
+    trace!("获取登陆二维码成功");
 
     let (m1, m2) = send_login_msg(login_user, &img_data, mp).await?;
     let _dms = DropMsg::new(tx, vec![m1, m2]);
-    info!("发送登陆消息通知");
+    trace!("发送登陆消息通知");
     match tab.wait_for_element_with_custom_timeout(".logged-text", Duration::from_secs(260)) {
         Ok(_) => {
-            info!("扫码验证成功");
+            info!("扫码登陆成功");
         }
         Err(e) => {
             info!("没有登陆, {}", e);
@@ -262,7 +269,7 @@ fn browse_news(browser: &Context<'_>, url: &str) -> Result<()> {
         let mut rng = thread_rng();
         rng.gen_range(80..110)
     };
-    info!("阅读文章 {} 秒", s);
+    debug!("阅读文章 {} 秒", s);
     thread::sleep(Duration::from_secs(s / 2));
     scroll_to(&tab, 1000)?;
     thread::sleep(Duration::from_secs(s / 2));
@@ -287,7 +294,7 @@ fn browse_video(browser: &Context<'_>, url: &str) -> Result<()> {
         let mut rng = thread_rng();
         rng.gen_range(130..260)
     };
-    info!("观看视频 {} 秒", s);
+    debug!("观看视频 {} 秒", s);
     thread::sleep(Duration::from_secs(s / 2));
     scroll_to(&tab, 500)?;
     thread::sleep(Duration::from_secs(s / 2));
@@ -322,7 +329,7 @@ async fn get_news_url(api: &str) -> Result<Vec<String>> {
     let resp = reqwest::get(api)
         .await
         .map_err(|e| anyhow!("请求列表失败: {}", e))?;
-    info!("获取新闻列表 status code {}", resp.status());
+    debug!("获取新闻列表 status code {}", resp.status());
     let b = resp.text().await?;
     let today = Local::now().format("%Y-%m-%d").to_string();
     let r: Vec<News> = serde_json::from_str(&b)?;

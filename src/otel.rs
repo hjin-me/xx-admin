@@ -3,11 +3,10 @@ use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::trace::{RandomIdGenerator, Sampler, Tracer};
 use opentelemetry_sdk::Resource;
 use std::time::Duration;
-use tracing::Level;
 use tracing_subscriber::prelude::*;
 
 fn init_tracer(name: &str, endpoint: &str) -> Tracer {
-    let tracer = opentelemetry_otlp::new_pipeline()
+    opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(
             opentelemetry_otlp::new_exporter()
@@ -28,16 +27,13 @@ fn init_tracer(name: &str, endpoint: &str) -> Tracer {
                 )])),
         )
         .install_batch(opentelemetry_sdk::runtime::Tokio)
-        .unwrap();
-    tracer
+        .unwrap()
 }
 
 // Initialize tracing-subscriber and return OtelGuard for opentelemetry-related termination processing
 pub fn init_tracing_subscriber(name: &str, endpoint: &str) -> OtelGuard {
     tracing_subscriber::registry()
-        .with(tracing_subscriber::filter::LevelFilter::from_level(
-            Level::INFO,
-        ))
+        .with(tracing_subscriber::filter::EnvFilter::try_from_default_env().expect("env filter"))
         .with(tracing_subscriber::fmt::layer())
         .with(tracing_opentelemetry::layer().with_tracer(init_tracer(name, endpoint)))
         .init();

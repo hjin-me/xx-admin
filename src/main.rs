@@ -9,8 +9,9 @@ use crate::cron::{start_daily_score, start_daily_study};
 use crate::otel::init_tracing_subscriber;
 use anyhow::Result;
 use clap::Parser;
+use std::env;
 use tokio::signal;
-use tracing::info;
+use tracing::{debug, info};
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -30,9 +31,10 @@ async fn main() -> Result<()> {
 
     let _g = init_tracing_subscriber("ggs", &args.otel);
 
-    let pwd = std::env::current_dir().unwrap();
-    info!(conf_path = &args.config, cwd = ?pwd, "Starting up",);
+    let pwd = env::current_dir().unwrap();
+    debug!(conf_path = &args.config, cwd = ?pwd, "Starting up",);
     info!("Version: {}", env!("COMMIT_ID"));
+    debug!("RUST_LOG: {:?}", env::var_os("RUST_LOG"));
     match args.cmd.as_str() {
         "admin" => tokio::select! {
             r = start_daily_score(&args.config) => {
