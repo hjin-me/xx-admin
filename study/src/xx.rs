@@ -1,5 +1,6 @@
+use crate::eval::get_user_info;
 use crate::try_study;
-use crate::utils::{get_login_ticket, new_browser};
+use crate::utils::{get_login_ticket, get_one_tab, new_browser};
 use anyhow::Result;
 use headless_chrome::browser::context::Context;
 use headless_chrome::Browser;
@@ -17,7 +18,7 @@ pub struct Xx {
 }
 
 impl Xx {
-    pub fn new(app_caller: &str) -> Result<Self> {
+    pub fn new() -> Result<Self> {
         info!("new Xx");
         let browser = new_browser(&None)?;
         let ctx_id = browser.new_context()?.get_id().to_string().clone();
@@ -53,6 +54,11 @@ impl Xx {
     }
     pub fn get_ticket(&self) -> String {
         self.ticket.0.clone()
+    }
+    pub fn get_user_info(&self) -> Result<String> {
+        let ctx = Context::new(&self.browser, self.ctx_id.clone());
+        let tab = get_one_tab(&ctx)?;
+        get_user_info(&tab)
     }
     pub fn try_study(&self, news_list: &[String], video_list: &[String]) -> Result<()> {
         info!("study");

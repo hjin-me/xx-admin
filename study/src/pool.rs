@@ -5,20 +5,17 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 pub use bb8;
 //
+
+pub type XxManagerPool = bb8::Pool<XxManager>;
 #[derive(Clone, Debug)]
-pub struct XxManager {
-    app_caller: String,
-}
+pub struct XxManager {}
 
 impl XxManager {
-    pub fn new(app_caller: &str) -> Self {
-        Self {
-            app_caller: app_caller.to_string(),
-        }
+    pub fn new() -> Self {
+        Self {}
     }
     pub async fn get_one(&self) -> Result<Xx> {
-        let app_caller = self.app_caller.clone();
-        tokio::spawn(async move { Xx::new(&app_caller) }).await?
+        tokio::spawn(async move { Xx::new() }).await?
     }
 }
 
@@ -54,9 +51,7 @@ mod test {
     #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
     async fn test_pool() {
         tracing_subscriber::fmt::init();
-        let manager = XxManager {
-            app_caller: "https://techxuexi.js.org/jump/techxuexi-20211023.html?".to_string(),
-        };
+        let manager = XxManager {};
         let pool = bb8::Pool::builder()
             .max_size(4)
             .min_idle(Some(2))

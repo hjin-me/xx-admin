@@ -89,8 +89,7 @@ fn main() {
         tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(async move {
-                let manager =
-                    XxManager::new("https://techxuexi.js.org/jump/techxuexi-20211023.html?");
+                let manager = XxManager::new();
                 let pool = bb8::Pool::builder()
                     .max_size(2)
                     .min_idle(Some(1))

@@ -3,6 +3,7 @@ mod pool;
 mod qrcode;
 mod utils;
 mod xx;
+mod state;
 
 use crate::eval::{get_today_score, get_today_tasks, get_user_info, scroll_to};
 use crate::qrcode::decode_qr;
