@@ -3,7 +3,6 @@ name = "study_serv"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 axum = { version = "0.6.20", optional = true }
@@ -19,9 +18,8 @@ wx = { path = "../wx", optional = true }
 study = { path = "../study", optional = true }
 toml = { version = "0.8.8", optional = true }
 tokio = { version = "1.34.0", features = ["full"], optional = true }
-dioxus-web = { version = "0.4.0", optional = true }
 
 [features]
 default = []
 ssr = ["axum", "tokio", "dioxus-fullstack/axum", "toml", "study", "wx"]
-web = ["dioxus-fullstack/web", "dioxus-web"]
+web = ["dioxus-fullstack/web"]

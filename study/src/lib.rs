@@ -1,41 +1,24 @@
 mod eval;
+mod pool;
 mod qrcode;
+mod utils;
+mod xx;
 
 use crate::eval::{get_today_score, get_today_tasks, get_user_info, scroll_to};
 use crate::qrcode::decode_qr;
+use crate::utils::{get_one_tab, new_browser, reset_tabs, wait_qr};
 use anyhow::{anyhow, Result};
 use chrono::Local;
 use headless_chrome::browser::context::Context;
-use headless_chrome::browser::default_executable;
-use headless_chrome::protocol::cdp::Page;
-use headless_chrome::{Browser, LaunchOptions, Tab};
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 use serde::Deserialize;
 use std::ops::Add;
-use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tokio::time;
 use tracing::{debug, error, info, instrument, trace, warn};
 use wx::{drop_msg_task, DropMsg, MsgApi, MP};
-
-#[instrument(skip_all)]
-fn new_browser(proxy_server: &Option<String>) -> Result<Browser> {
-    trace!("准备启动浏览器");
-    let proxy_server = proxy_server.as_ref().map(|s| s.as_str());
-    let launch_options = LaunchOptions::default_builder()
-        .path(Some(default_executable().map_err(|e| anyhow!(e))?))
-        .window_size(Some((1920, 1080)))
-        // .headless(false)
-        .sandbox(false)
-        .idle_browser_timeout(Duration::from_secs(300))
-        .proxy_server(proxy_server)
-        .build()
-        .map_err(|e| anyhow!("构造 Chrome 启动参数失败: {}", e))?;
-    let browser = Browser::new(launch_options).map_err(|e| anyhow!("启动浏览器失败: {}", e))?;
-    Ok(browser)
-}
 
 #[instrument(skip_all, fields(user = %login_user))]
 pub async fn browse_xx(
@@ -84,9 +67,10 @@ pub async fn browse_xx(
     mp.send_text_msg(login_user, &format!("Hi, {} 学习强国登陆成功", nick_name))
         .await
         .map_err(|e| anyhow!("发送登陆成功消息失败: {}", e))?;
-
+    let news_list = get_news_list().await?;
+    let video_list = get_video_list().await?;
     for _ in 0..2 {
-        match try_study(&ctx).await {
+        match try_study(&ctx, &news_list, &video_list) {
             Ok(_) => {
                 let n = study_report(&ctx, login_user, mp).await?;
                 info!(
@@ -119,9 +103,7 @@ async fn study_report<T: MsgApi + Clone>(
     Ok(n)
 }
 #[instrument(skip_all)]
-async fn try_study(browser: &Context<'_>) -> Result<()> {
-    let news_list = get_news_list().await?;
-    let video_list = get_video_list().await?;
+fn try_study(browser: &Context<'_>, news_list: &[String], video_list: &[String]) -> Result<()> {
     let mut news_iter = news_list.iter();
     let mut video_iter = video_list.iter();
 
@@ -152,7 +134,7 @@ async fn try_study(browser: &Context<'_>) -> Result<()> {
                         browse_news(browser, u)?;
                     } else {
                         warn!("居然没有文章了，不知道怎么处理");
-                        time::sleep(Duration::from_secs(300)).await;
+                        thread::sleep(Duration::from_secs(300));
                     }
                 }
                 "我要视听学习" => {
@@ -169,7 +151,7 @@ async fn try_study(browser: &Context<'_>) -> Result<()> {
                         browse_video(browser, u)?;
                     } else {
                         warn!("居然没有视频了，不知道怎么处理");
-                        time::sleep(Duration::from_secs(300)).await;
+                        thread::sleep(Duration::from_secs(300));
                     }
                 }
                 _ => {
@@ -181,7 +163,7 @@ async fn try_study(browser: &Context<'_>) -> Result<()> {
 
     Ok(())
 }
-#[instrument(skip_all)]
+#[instrument(skip(ctx, mp))]
 async fn try_login(
     ctx: &Context<'_>,
     login_user: &str,
@@ -228,7 +210,7 @@ async fn login(browser: &Context<'_>, login_user: &str, mp: &MP, app_caller: &st
     app_caller.extend(form_urlencoded::byte_serialize(login_url.as_bytes()));
     let login_url = app_caller.as_str();
 
-    let msgs = send_login_msg(login_user, &img_data, &login_url, mp).await?;
+    let msgs = send_login_msg(login_user, &img_data, login_url, mp).await?;
     let _dms = DropMsg::new(tx, msgs);
     trace!("发送登陆消息通知");
     match tab.wait_for_element_with_custom_timeout(".logged-text", Duration::from_secs(260)) {
@@ -243,23 +225,6 @@ async fn login(browser: &Context<'_>, login_user: &str, mp: &MP, app_caller: &st
     Ok(())
 }
 
-#[instrument(skip_all)]
-fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
-    let el = tab
-        .wait_for_element(".loginbox-inner")
-        .map_err(|e| anyhow!("没找到二维码: {}", e))?;
-    thread::sleep(Duration::from_secs(3));
-    let viewport = el.get_box_model()?.margin_viewport();
-    el.scroll_into_view()?;
-
-    let png_data = tab.capture_screenshot(
-        Page::CaptureScreenshotFormatOption::Png,
-        None,
-        Some(viewport),
-        true,
-    )?;
-    Ok(png_data)
-}
 #[instrument(skip_all)]
 async fn send_login_msg<T: MsgApi>(
     u: &str,
@@ -372,25 +337,7 @@ async fn get_news_url(api: &str) -> Result<Vec<String>> {
     latest.extend(shuffle);
     Ok(latest)
 }
-#[instrument(skip_all)]
-fn reset_tabs(browser: &Context) -> Result<()> {
-    // headless 模式 close 有问题，这样将就一下
-    let tabs = browser.get_tabs().unwrap();
-    for tab in tabs.iter() {
-        tab.navigate_to("about:blank")?;
-    }
-    Ok(())
-}
-#[instrument(skip_all)]
-fn get_one_tab(browser: &Context) -> Result<Arc<Tab>> {
-    let tabs = browser.get_tabs().unwrap();
-    match tabs.into_iter().next() {
-        Some(tab) => Ok(tab),
-        None => browser
-            .new_tab()
-            .map_err(|e| anyhow!("创建新标签页失败: {}", e)),
-    }
-}
+
 #[cfg(test)]
 mod test {
     use super::*;

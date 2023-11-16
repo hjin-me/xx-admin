@@ -75,33 +75,5 @@ fn main() {
     #[cfg(feature = "ssr")]
     tracing_subscriber::fmt::init();
 
-    #[cfg(feature = "web")]
-    // Hydrate the application on the client
-    dioxus_web::launch_with_props(
-        app,
-        AppProps { count: 0 },
-        dioxus_web::Config::new().hydrate(true),
-    );
-    #[cfg(feature = "ssr")]
-    {
-        tokio::runtime::Runtime::new()
-            .unwrap()
-            .block_on(async move {
-                tracing::info!("{:?}", tokio::runtime::Handle::current().runtime_flavor());
-                let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 8080));
-                axum::Server::bind(&addr)
-                    .serve(
-                        axum::Router::new()
-                            // Server side render the application, serve static assets, and register server functions
-                            .serve_dioxus_application(
-                                "",
-                                ServeConfigBuilder::new(app, AppProps { count: 0 }),
-                            )
-                            .into_make_service(),
-                    )
-                    .await
-                    .unwrap();
-            });
-    }
-    // LaunchBuilder::new_with_props(app, AppProps { count: 0 }).launch();
+    LaunchBuilder::new_with_props(app, AppProps { count: 0 }).launch();
 }

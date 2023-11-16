@@ -12,19 +12,15 @@ pub async fn run() -> Result<()> {
     info!("{:?}", tokio::runtime::Handle::current().runtime_flavor());
     let contents = include_str!("../../config.toml");
     let p: StudyConfig = toml::from_str(contents)?;
-    tokio::runtime::Runtime::new()?
-        .spawn(async move {
-            start_daily_study_schedule(
-                &p.corp_id,
-                &p.corp_secret,
-                p.agent_id,
-                "",
-                &None,
-                &p.app_caller,
-            )
-            .await;
-        })
-        .await?;
+    start_daily_study_schedule(
+        &p.corp_id,
+        &p.corp_secret,
+        p.agent_id,
+        "SongSong",
+        &None,
+        &p.app_caller,
+    )
+    .await;
     Ok(())
 }
 #[instrument(skip_all, fields(user = %target))]
