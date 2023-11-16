@@ -7,11 +7,13 @@ use std::ops::Add;
 use std::time::Duration;
 use tracing::info;
 
+#[derive(Clone)]
 pub struct Xx {
     browser: Browser,
     ctx_id: String,
     ticket: (String, Vec<u8>),
     available_before: chrono::DateTime<chrono::Local>,
+    logged_in: bool,
 }
 
 impl Xx {
@@ -28,20 +30,26 @@ impl Xx {
             ctx_id,
             ticket,
             available_before,
+            logged_in: false,
         })
     }
 
-    pub fn is_login(&self) -> Result<bool> {
-        info!("is_login");
+    pub fn check_login(&mut self) -> Result<bool> {
+        info!("check_login");
+        if self.logged_in {
+            return Ok(true);
+        }
         let ctx = Context::new(&self.browser, self.ctx_id.clone());
-        Ok(ctx
+        let r = ctx
             .get_tabs()?
             .iter()
             .filter(|t| t.get_url().contains("https://www.xuexi.cn/"))
             .any(|tab| {
                 tab.wait_for_element_with_custom_timeout(".logged-text", Duration::from_secs(3))
                     .is_ok()
-            }))
+            });
+        self.logged_in = r;
+        Ok(r)
     }
     pub fn get_ticket(&self) -> String {
         self.ticket.0.clone()
@@ -56,6 +64,7 @@ impl Xx {
     pub fn ping(&self) -> bool {
         info!("ping");
         self.available_before > chrono::Local::now()
+            && !self.logged_in
             && self.browser.get_version().is_ok()
             && self
                 .browser

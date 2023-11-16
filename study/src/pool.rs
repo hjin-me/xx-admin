@@ -1,6 +1,5 @@
-#![allow(clippy::needless_doctest_main)]
-#![deny(missing_docs, missing_debug_implementations)]
-
+///#![allow(clippy::needless_doctest_main)]
+/// #![deny(missing_docs, missing_debug_implementations)]
 use crate::xx::Xx;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -12,6 +11,11 @@ pub struct XxManager {
 }
 
 impl XxManager {
+    pub fn new(app_caller: &str) -> Self {
+        Self {
+            app_caller: app_caller.to_string(),
+        }
+    }
     pub async fn get_one(&self) -> Result<Xx> {
         let app_caller = self.app_caller.clone();
         tokio::spawn(async move { Xx::new(&app_caller) }).await?
@@ -28,9 +32,6 @@ impl bb8::ManageConnection for XxManager {
     }
 
     async fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
-        if conn.is_login()? {
-            return Err(anyhow!("已经被登陆了"));
-        }
         if conn.ping() {
             Ok(())
         } else {
@@ -74,7 +75,7 @@ mod test {
                     .unwrap()
                     .block_on(async move {
                         info!("new one spawn");
-                        let conn = match pool.get().await {
+                        let mut conn = match pool.get().await {
                             Ok(conn) => conn,
                             Err(e) => {
                                 match e {
@@ -94,7 +95,7 @@ mod test {
                         info!("ticket = {}", ticket);
 
                         loop {
-                            match conn.is_login() {
+                            match conn.check_login() {
                                 Ok(b) => {
                                     if b {
                                         info!("登陆成功");

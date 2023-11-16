@@ -1,6 +1,12 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use tracing::{info, instrument, warn};
+use std::thread;
+use std::time::Duration;
+use study::bb8::Pool;
+use study::{bb8, XxManager};
+use tokio::time::sleep;
+use tracing::{error, info, instrument, warn};
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct StudyConfig {
     pub corp_id: String,
@@ -8,52 +14,65 @@ pub struct StudyConfig {
     pub agent_id: i64,
     pub app_caller: String,
 }
-pub async fn run() -> Result<()> {
+pub async fn run(pool: Pool<XxManager>) -> Result<String> {
     info!("{:?}", tokio::runtime::Handle::current().runtime_flavor());
-    let contents = include_str!("../../config.toml");
-    let p: StudyConfig = toml::from_str(contents)?;
-    start_daily_study_schedule(
-        &p.corp_id,
-        &p.corp_secret,
-        p.agent_id,
-        "SongSong",
-        &None,
-        &p.app_caller,
-    )
-    .await;
-    Ok(())
-}
-#[instrument(skip_all, fields(user = %target))]
-async fn start_daily_study_schedule(
-    corp_id: &str,
-    corp_secret: &str,
-    agent_id: i64,
-    target: &str,
-    proxy_server: &Option<String>,
-    app_caller: &str,
-) {
-    info!("每日学习任务已启动");
-    let r = tokio::runtime::Runtime::new().unwrap();
-    let corp_id = corp_id.to_string();
-    let corp_secret = corp_secret.to_string();
-    let target = target.to_string();
-    let proxy_server = proxy_server.clone();
-    let app_caller = app_caller.to_string();
-    let _ = r
-        .spawn(async move {
-            let mp = wx::MP::new(corp_id.as_str(), corp_secret.as_str(), agent_id);
 
-            match study::browse_xx(&mp, target.as_str(), &proxy_server, &app_caller).await {
+    info!("pool get");
+    let mut conn = match pool.get_owned().await {
+        Ok(conn) => conn,
+        Err(e) => {
+            match e {
+                bb8::RunError::User(e) => {
+                    error!("获取连接失败: {}", e);
+                }
+                bb8::RunError::TimedOut => {
+                    error!("获取连接超时");
+                }
+            }
+            return Err(anyhow!("获取连接池失败了"));
+        }
+    };
+    info!("got");
+
+    let ticket = conn.get_ticket();
+    info!("ticket = {}", ticket);
+    thread::spawn(move || {
+        tokio::runtime::Runtime::new().unwrap().block_on(async move {
+            // let pool = pool.clone();
+            // let news_list = get_news_list().await.expect("获取新闻列表失败");
+            // let video_list = get_video_list().await.expect("获取视频列表失败");
+            loop {
+                match conn.check_login() {
+                    Ok(b) => if b {
+                        break;
+                    } else {
+                        info!("还没登陆");
+                        sleep(Duration::from_secs(5)).await;
+                    },
+                    Err(e) => {
+                        error!("判断登陆状态失败: {}", e);
+                        break;
+                    }
+                }
+            }
+
+            let news_list = vec!["https://www.xuexi.cn/lgpage/detail/index.html?id=1675585234174641917&item_id=1675585234174641917".to_string()];
+            let video_list :Vec<String>= vec![];
+            match conn.try_study(&news_list, &video_list) {
                 Ok(_) => {
-                    info!("今天的学习强国就逛到这里了");
+                    info!("学习成功");
                 }
                 Err(e) => {
-                    warn!("学习任务执行失败: {}", e);
+                    error!("学习失败: {}", e);
                 }
-            };
-        })
-        .await;
+            }
+            drop(conn);
+       })
+    });
+
+    Ok(ticket)
 }
+
 #[cfg(test)]
 mod test {
     use super::*;

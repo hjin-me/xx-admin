@@ -10,6 +10,7 @@ use crate::utils::{get_one_tab, new_browser, reset_tabs, wait_qr};
 use anyhow::{anyhow, Result};
 use chrono::Local;
 use headless_chrome::browser::context::Context;
+pub use pool::*;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 use serde::Deserialize;
@@ -19,6 +20,7 @@ use std::time::Duration;
 use tokio::time;
 use tracing::{debug, error, info, instrument, trace, warn};
 use wx::{drop_msg_task, DropMsg, MsgApi, MP};
+pub use xx::Xx;
 
 #[instrument(skip_all, fields(user = %login_user))]
 pub async fn browse_xx(
