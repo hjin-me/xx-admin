@@ -52,7 +52,7 @@ pub fn get_one_tab(browser: &Context) -> Result<Arc<Tab>> {
 }
 
 #[instrument(skip(ctx))]
-pub fn get_login_ticket(ctx: &Context<'_>, app_caller: &str) -> Result<(String, Vec<u8>)> {
+pub fn get_login_ticket(ctx: &Context<'_>) -> Result<(String, Vec<u8>)> {
     reset_tabs(ctx)?;
     let tab = get_one_tab(ctx)?;
     tab.navigate_to("https://www.xuexi.cn/")
@@ -79,10 +79,8 @@ pub fn get_login_ticket(ctx: &Context<'_>, app_caller: &str) -> Result<(String, 
     let img_data = wait_qr(&tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;
     trace!("获取登陆二维码成功");
     let login_url = decode_qr(&img_data)?;
-    let mut app_caller = app_caller.to_string();
-    app_caller.extend(form_urlencoded::byte_serialize(login_url.as_bytes()));
 
-    Ok((app_caller, img_data))
+    Ok((login_url, img_data))
 }
 
 #[instrument(skip_all)]

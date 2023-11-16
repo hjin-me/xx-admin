@@ -17,39 +17,38 @@ use dioxus_fullstack::{
     prelude::*,
 };
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
-#[derive(Props, PartialEq, Debug, Default, Serialize, Deserialize, Clone)]
-struct AppProps {
-    count: i32,
-}
-
-fn app(cx: Scope<AppProps>) -> Element {
-    let state = use_server_future(cx, (), |()| async move { "".to_string() })?.value();
-
-    let mut count = use_state(cx, || 0);
+fn app(cx: Scope) -> Element {
     let text = use_state(cx, || "...".to_string());
 
     cx.render(rsx! {
         div {
-            "Server state: {state}"
+            "企业微信点击右上角，在内置浏览器打开"
         }
-        h1 { "High-Five counter: {count}" }
-        button { onclick: move |_| count += 1, "Up high!" }
-        button { onclick: move |_| count -= 1, "Down low!" }
+        h2 { "点击登录：" }
+        pre {
+            a {id:"login",target:"_blank",rel:"noopener", href:"{text}", "{text}"}
+            }
+        h3 {
+            "点击上方链接登录，没有显示就出了问题"
+        }
+        p {
+            "中国要强盛、要复兴，就一定要大力发展科学技术，努力成为世界主要科学中心和创新高地。我们比历史上任何时期都更接近中华民族伟大复兴的目标，我们比历史上任何时期都更需要建设世界科技强国！"
+        }
         button {
             onclick: move |_| {
                 to_owned![text];
                 async move {
                     if let Ok(data) = get_server_data().await {
                         println!("Client received: {}", data);
-                        text.set(data.clone());
+                        text.set(format!("dtxuexi://appclient/page/study_feeds?url={}",data.clone()));
                         post_server_data(data).await.unwrap();
                     }
                 }
             },
-            "Run a server function!"
+            "获取登陆链接"
         }
-        "Server said: {text}"
     })
 }
 
@@ -67,7 +66,10 @@ async fn get_server_data() -> Result<String, ServerFnError> {
     use axum::Extension;
     use study::{bb8, XxManager};
     let Extension(xx_pool): Extension<bb8::Pool<XxManager>> = extract().await?;
-    Ok(xx::run(xx_pool).await.unwrap())
+    Ok(match xx::run(xx_pool).await {
+        Ok(s) => s,
+        Err(e) => format!("{}", e),
+    })
     // Ok(reqwest::get("https://httpbin.org/ip").await?.text().await?)
 }
 
@@ -75,7 +77,7 @@ fn main() {
     #[cfg(feature = "web")]
     {
         tracing_wasm::set_as_global_default();
-        LaunchBuilder::new_with_props(app, AppProps { count: 0 }).launch();
+        LaunchBuilder::new_with_props(app, ()).launch();
     }
 
     #[cfg(feature = "ssr")]
@@ -92,6 +94,7 @@ fn main() {
                 let pool = bb8::Pool::builder()
                     .max_size(2)
                     .min_idle(Some(1))
+                    .idle_timeout(Some(Duration::from_secs(170)))
                     // .connection_timeout(std::time::Duration::from_secs(30))
                     .build(manager)
                     .await
@@ -100,10 +103,7 @@ fn main() {
                 // build our application with some routes
                 let app = Router::new()
                     // Server side render the application, serve static assets, and register server functions
-                    .serve_dioxus_application(
-                        "",
-                        ServeConfigBuilder::new(app, AppProps { count: 0 }),
-                    )
+                    .serve_dioxus_application("", ServeConfigBuilder::new(app, ()))
                     .layer(Extension(pool));
                 // .layer(
                 //     axum_session_auth::AuthSessionLayer::<

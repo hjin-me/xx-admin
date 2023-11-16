@@ -4,6 +4,7 @@ use std::thread;
 use std::time::Duration;
 use study::bb8::Pool;
 use study::{bb8, XxManager};
+use tokio::time;
 use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
 
@@ -38,10 +39,8 @@ pub async fn run(pool: Pool<XxManager>) -> Result<String> {
     info!("ticket = {}", ticket);
     thread::spawn(move || {
         tokio::runtime::Runtime::new().unwrap().block_on(async move {
-            // let pool = pool.clone();
-            // let news_list = get_news_list().await.expect("获取新闻列表失败");
-            // let video_list = get_video_list().await.expect("获取视频列表失败");
-            loop {
+            tokio::select! {
+               _ = async {loop {
                 match conn.check_login() {
                     Ok(b) => if b {
                         break;
@@ -51,12 +50,11 @@ pub async fn run(pool: Pool<XxManager>) -> Result<String> {
                     },
                     Err(e) => {
                         error!("判断登陆状态失败: {}", e);
-                        break;
                     }
                 }
-            }
+                }
 
-            let news_list = vec!["https://www.xuexi.cn/lgpage/detail/index.html?id=1675585234174641917&item_id=1675585234174641917".to_string()];
+                   let news_list = vec!["https://www.xuexi.cn/lgpage/detail/index.html?id=1675585234174641917&item_id=1675585234174641917".to_string()];
             let video_list :Vec<String>= vec![];
             match conn.try_study(&news_list, &video_list) {
                 Ok(_) => {
@@ -66,11 +64,18 @@ pub async fn run(pool: Pool<XxManager>) -> Result<String> {
                     error!("学习失败: {}", e);
                 }
             }
-            drop(conn);
+            } => {},
+               _ = time::sleep(Duration::from_secs(30)) => {
+                    warn!("等待登陆超时");
+                },
+            }
+            drop(conn)
        })
     });
 
-    Ok(ticket)
+    let mut app_caller = "".to_string();
+    app_caller.extend(form_urlencoded::byte_serialize(ticket.as_bytes()));
+    Ok(app_caller)
 }
 
 #[cfg(test)]

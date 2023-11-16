@@ -22,7 +22,7 @@ impl Xx {
         let browser = new_browser(&None)?;
         let ctx_id = browser.new_context()?.get_id().to_string().clone();
         let ctx = Context::new(&browser, ctx_id.clone());
-        let ticket = get_login_ticket(&ctx, app_caller)?;
+        let ticket = get_login_ticket(&ctx)?;
         let available_before = chrono::Local::now().add(chrono::Duration::minutes(3));
         info!("new Xx ok {:?} {}", ticket.0, available_before);
         Ok(Self {
