@@ -21,50 +21,67 @@ use std::time::Duration;
 use tracing::info;
 
 fn app(cx: Scope) -> Element {
-    let text = use_state(cx, || "...".to_string());
+    let text = use_state(cx, || "".to_string());
     let s_id = use_state(cx, || 0u64);
+    let refresh_btn = rsx! {
+        p {
+            button { onclick: move |_| {
+                    to_owned![s_id, text];
+                    async move {
+                        if let Ok(data) = get_ticket(s_id.get().clone()).await {
+                            info!("Client received: {}", data);
+                            text.set(
+                                format!("dtxuexi://appclient/page/study_feeds?url={}", data.clone()),
+                            );
+                        }
+                    }
+                },
+                "获取登陆链接"
+            }
+        }
+    };
 
     cx.render(rsx! {
-        div {
-            "企业微信点击右上角，在内置浏览器打开"
-        }
-        h2 { "点击登录：" }
-        pre {
-            a {id:"login",target:"_blank",rel:"noopener", href:"{text}", "{text}"}
+        div { "企业微信点击右上角，在内置浏览器打开" }
+        h1 { "1. 点击按钮" }
+        p {
+            button { onclick: move |_| {
+                    to_owned![s_id, text];
+                    async move {
+                        if let Ok(data) = create_task().await {
+                            info!("Client received: {}", data);
+                            s_id.set(data);
+                            if let Ok(data) = get_ticket(data).await {
+                                text.set(
+                                    format!("dtxuexi://appclient/page/study_feeds?url={}", data.clone()),
+                                );
+                            }
+                        }
+                    }
+                },
+                "请让我学习"
             }
-        h3 {
-            "点击上方链接登录，没有显示就出了问题"
         }
+        if text.get() != "" {
+            rsx! {
+                h1 { "2. 点击下方登录：" }
+                pre { a { id: "login", target: "_blank", rel: "noopener", href: "{text}", "{text}" } }
+                h3 { "点击上方链接登录，没有显示就出了问题" }
+            }
+        } else {
+            rsx! {
+                ""
+            }
+        }
+
         p {
             "中国要强盛、要复兴，就一定要大力发展科学技术，努力成为世界主要科学中心和创新高地。我们比历史上任何时期都更接近中华民族伟大复兴的目标，我们比历史上任何时期都更需要建设世界科技强国！"
         }
-        button {
-            onclick: move |_| {
-                to_owned![s_id, text];
-                async move {
-                    if let Ok(data) = create_task().await {
-                        info!("Client received: {}", data);
-                        s_id.set(data);
 
-                        if let Ok(data) = get_ticket(data).await {
-                            text.set(format!("dtxuexi://appclient/page/study_feeds?url={}",data.clone()));
-                        }
-                    }
-                }
-            },
-            "创建一个任务"
-        }
-        button {
-            onclick: move |_| {
-                to_owned![s_id, text];
-                async move {
-                    if let Ok(data) = get_ticket(s_id.get().clone()).await {
-                        info!("Client received: {}", data);
-                        text.set(format!("dtxuexi://appclient/page/study_feeds?url={}",data.clone()));
-                    }
-                }
-            },
-            "获取登陆链接"
+        if *s_id.get() != 0 {
+            rsx! {refresh_btn}
+        } else {
+            rsx! {""}
         }
     })
 }

@@ -1,4 +1,4 @@
-FROM hjin/dioxus-build:202308140541416b1535 as builder
+FROM hjin/dioxus-build:2023111708511884d40e as builder
 WORKDIR /build
 COPY . .
 RUN cd study_serv \
