@@ -25,6 +25,7 @@ use tracing::{info, trace};
 fn app(cx: Scope) -> Element {
     let text = use_state(cx, || "".to_string());
     let s_id = use_state(cx, || 0u64);
+    let nickname = use_state(cx, || "".to_string());
     let refresh_btn = rsx! {
         p {
             button { onclick: move |_| {
@@ -85,6 +86,21 @@ fn app(cx: Scope) -> Element {
         } else {
             rsx! {""}
         }
+        p { "当前用户：{nickname}" }
+
+        p {
+            button { onclick: move |_| {
+                    to_owned![s_id, nickname];
+                    async move {
+                        if let Ok(data) = get_username(s_id.get().clone()).await {
+                            info!("Client received: {}", data);
+                            nickname.set(data);
+                        }
+                    }
+                },
+                "获取当前用户名"
+            }
+        }
     })
 }
 
@@ -101,13 +117,25 @@ fn app(cx: Scope) -> Element {
 async fn get_ticket(s_id: u64) -> Result<String, ServerFnError> {
     match xx::try_get_ticket(s_id).await {
         Ok(s) => Ok(s),
-        Err(e) => Ok(format!("{}", e)),
+        Err(e) => Err(dioxus_fullstack::prelude::ServerFnError::ServerError(
+            e.to_string(),
+        )),
     }
 }
 
 #[server(CreateTask, "/xx/api")]
 async fn create_task() -> Result<u64, ServerFnError> {
     match xx::start_new_task().await {
+        Ok(s) => Ok(s),
+        Err(e) => Err(dioxus_fullstack::prelude::ServerFnError::ServerError(
+            e.to_string(),
+        )),
+    }
+}
+
+#[server(GetUsername, "/xx/api")]
+async fn get_username(s_id: u64) -> Result<String, ServerFnError> {
+    match xx::try_get_current_user(s_id).await {
         Ok(s) => Ok(s),
         Err(e) => Err(dioxus_fullstack::prelude::ServerFnError::ServerError(
             e.to_string(),
@@ -135,7 +163,7 @@ fn main() {
                 let manager = XxManager::new();
                 trace!("init browsers");
                 let pool = bb8::Pool::builder()
-                    .max_size(2)
+                    .max_size(10)
                     .min_idle(Some(1))
                     .idle_timeout(Some(Duration::from_secs(170)))
                     // .connection_timeout(std::time::Duration::from_secs(30))

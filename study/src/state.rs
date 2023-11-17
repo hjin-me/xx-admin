@@ -141,6 +141,9 @@ impl XxState {
 
     pub fn get_nick_name(&self) -> Result<String> {
         let s = self.state.read().unwrap();
+        if s.login_ticket.is_some() {
+            return Err(anyhow!("当前用户还未扫码登陆"));
+        }
         match s.nick_name.clone() {
             Some(t) => Ok(t),
             None => Err(anyhow!("还没有获取到 nick_name")),

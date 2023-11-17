@@ -24,7 +24,7 @@ pub async fn try_get_ticket(s_id: u64) -> Result<String> {
 
     let state = ss.get(s_id).ok_or(anyhow!("没有找到状态数据"))?;
 
-    for _ in 0..10 {
+    for i in 1..11 {
         match state.get_ticket() {
             Ok(s) => {
                 let mut ticket = "".to_string();
@@ -32,12 +32,32 @@ pub async fn try_get_ticket(s_id: u64) -> Result<String> {
                 return Ok(ticket);
             }
             Err(e) => {
-                warn!("获取 ticket 失败: {}", e);
+                warn!("获取 ticket 失败[第{}次]: {}", i, e);
             }
         }
         sleep(Duration::from_millis(50)).await;
     }
     Err(anyhow!("获取 ticket 失败"))
+}
+pub async fn try_get_current_user(s_id: u64) -> Result<String> {
+    use axum::Extension;
+    use study::StateSession;
+    let Extension(ss): Extension<StateSession> = extract().await?;
+
+    let state = ss.get(s_id).ok_or(anyhow!("没有找到状态数据"))?;
+
+    for i in 1..11 {
+        match state.get_nick_name() {
+            Ok(s) => {
+                return Ok(s);
+            }
+            Err(e) => {
+                warn!("获取用户名失败[第{}次]: {}", i, e);
+            }
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+    Err(anyhow!("获取用户名失败"))
 }
 
 pub async fn start_new_task() -> Result<u64> {
