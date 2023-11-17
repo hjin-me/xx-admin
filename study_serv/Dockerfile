@@ -10,4 +10,5 @@ COPY --from=builder /build/target/release/study_serv /usr/local/bin/study_serv
 COPY --from=builder /build/study_serv/dist /webser/www/dist
 ENV CHROME /usr/bin/google-chrome
 ENV RUST_LOG warn,study_serv=info,wx=info,study=info
+WORKDIR /webser/www
 ENTRYPOINT ["study_serv"]

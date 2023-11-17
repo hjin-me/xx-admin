@@ -7,6 +7,8 @@
 
 #![allow(non_snake_case, unused)]
 
+#[cfg(feature = "ssr")]
+mod backend;
 mod state;
 #[cfg(feature = "ssr")]
 mod xx;
@@ -18,7 +20,7 @@ use dioxus_fullstack::{
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use tracing::info;
+use tracing::{info, trace};
 
 fn app(cx: Scope) -> Element {
     let text = use_state(cx, || "".to_string());
@@ -122,23 +124,26 @@ fn main() {
 
     #[cfg(feature = "ssr")]
     {
-        tracing_subscriber::fmt::init();
         use axum::routing::*;
         use axum::Extension;
         use study::{bb8, StateSession, XxManager};
         tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(async move {
+                let _g = crate::backend::otel::init_tracing_subscriber("study");
+                trace!("Starting up");
                 let manager = XxManager::new();
+                trace!("init browsers");
                 let pool = bb8::Pool::builder()
-                    .max_size(3)
-                    .min_idle(Some(2))
+                    .max_size(2)
+                    .min_idle(Some(1))
                     .idle_timeout(Some(Duration::from_secs(170)))
                     // .connection_timeout(std::time::Duration::from_secs(30))
                     .build(manager)
                     .await
                     .unwrap();
 
+                trace!("init sessions");
                 let ss = StateSession::new(&pool);
 
                 // build our application with some routes
