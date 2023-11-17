@@ -1,17 +1,18 @@
 mod eval;
 mod pool;
 mod qrcode;
+mod state;
 mod utils;
 mod xx;
-mod state;
 
 use crate::eval::{get_today_score, get_today_tasks, get_user_info, scroll_to};
-use crate::qrcode::decode_qr;
+pub use crate::pool::*;
+pub use crate::qrcode::*;
 use crate::utils::{get_one_tab, new_browser, reset_tabs, wait_qr};
+pub use crate::xx::Xx;
 use anyhow::{anyhow, Result};
 use chrono::Local;
 use headless_chrome::browser::context::Context;
-pub use pool::*;
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 use serde::Deserialize;
@@ -21,7 +22,6 @@ use std::time::Duration;
 use tokio::time;
 use tracing::{debug, error, info, instrument, trace, warn};
 use wx::{drop_msg_task, DropMsg, MsgApi, MP};
-pub use xx::Xx;
 
 #[instrument(skip_all, fields(user = %login_user))]
 pub async fn browse_xx(

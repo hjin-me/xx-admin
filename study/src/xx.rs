@@ -1,12 +1,12 @@
-use crate::eval::get_user_info;
+use crate::eval::{get_today_score, get_user_info};
 use crate::try_study;
 use crate::utils::{get_login_ticket, get_one_tab, new_browser};
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use headless_chrome::browser::context::Context;
 use headless_chrome::Browser;
 use std::ops::Add;
 use std::time::Duration;
-use tracing::info;
+use tracing::trace;
 
 #[derive(Clone)]
 pub struct Xx {
@@ -19,13 +19,13 @@ pub struct Xx {
 
 impl Xx {
     pub fn new() -> Result<Self> {
-        info!("new Xx");
+        trace!("new Xx");
         let browser = new_browser(&None)?;
         let ctx_id = browser.new_context()?.get_id().to_string().clone();
         let ctx = Context::new(&browser, ctx_id.clone());
         let ticket = get_login_ticket(&ctx)?;
         let available_before = chrono::Local::now().add(chrono::Duration::minutes(3));
-        info!("new Xx ok {:?} {}", ticket.0, available_before);
+        trace!("new Xx ok {:?} {}", ticket.0, available_before);
         Ok(Self {
             browser,
             ctx_id,
@@ -36,7 +36,7 @@ impl Xx {
     }
 
     pub fn check_login(&mut self) -> Result<bool> {
-        info!("check_login");
+        trace!("check_login");
         if self.logged_in {
             return Ok(true);
         }
@@ -61,14 +61,23 @@ impl Xx {
         get_user_info(&tab)
     }
     pub fn try_study(&self, news_list: &[String], video_list: &[String]) -> Result<()> {
-        info!("study");
+        trace!("study");
         let ctx = Context::new(&self.browser, self.ctx_id.clone());
         try_study(&ctx, news_list, video_list)?;
         Ok(())
     }
+    pub fn get_today_score(&self) -> Result<i64> {
+        let ctx = Context::new(&self.browser, self.ctx_id.clone());
+        let tab = ctx
+            .get_tabs()?
+            .into_iter()
+            .find(|t| t.get_url().contains("https://www.xuexi.cn/"))
+            .ok_or(anyhow!("没有找到学习标签"))?;
+        get_today_score(&tab)
+    }
 
     pub fn ping(&self) -> bool {
-        info!("ping");
+        trace!("ping");
         self.available_before > chrono::Local::now()
             && !self.logged_in
             && self.browser.get_version().is_ok()

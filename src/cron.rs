@@ -23,6 +23,7 @@ pub async fn start_daily_score(conf_path: &str) -> Result<()> {
             &p.xx_org_gray_id,
             &mp,
             p.proxy_server.clone(),
+            &p.app_caller,
         );
 
         loop {

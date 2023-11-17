@@ -45,11 +45,11 @@ pub async fn run(pool: Pool<XxManager>) -> Result<String> {
                     Ok(b) => if b {
                         break;
                     } else {
-                        info!("还没登陆");
+                        trace!("还没登陆");
                         sleep(Duration::from_secs(5)).await;
                     },
                     Err(e) => {
-                        error!("判断登陆状态失败: {}", e);
+                        debug!("判断登陆状态失败: {}", e);
                     }
                 }
                 }

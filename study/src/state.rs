@@ -1,6 +1,7 @@
 use crate::{XxManager, XxManagerPool};
 use anyhow::{anyhow, Error, Result};
 use bb8::PooledConnection;
+use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 use tracing::{error, info, warn};
@@ -11,24 +12,36 @@ enum StateChange {
     WaitingLogin(String),
     LoggedIn(String),
     StartLearn,
-    Complete(i32),
+    Complete(i64),
+}
+#[derive(Default, Debug)]
+struct State {
+    pub broken: bool,
+    pub login_ticket: String,
+    pub nick_name: String,
+    pub score: Option<i64>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct XxState {
-    pub login_ticket: String,
-    pub nickname: String,
+    state: Arc<RwLock<State>>,
 }
 
 impl XxState {
-    pub fn new(pool: XxManagerPool) -> Self {
+    pub fn new() -> Self {
+        Self {
+            state: Arc::new(RwLock::new(State::default())),
+        }
+    }
+
+    pub fn serve(&self, pool: XxManagerPool) -> Result<()> {
         let (tx, rx) = std::sync::mpsc::channel::<StateChange>();
         thread::spawn(move || {
             let run = match tokio::runtime::Runtime::new() {
                 Ok(r) => r,
                 Err(e) => return Err(anyhow!("XxState 启动后台任务失败: {}", e)),
             };
-            run.block_on(async {
+            match run.block_on(async {
                 info!("get pool");
                 let mut conn = match pool.get().await {
                     Ok(conn) => conn,
@@ -48,31 +61,34 @@ impl XxState {
                 let ticket = conn.get_ticket();
                 tx.send(StateChange::WaitingLogin(ticket))?;
                 info!("got");
-                waiting_login(&mut conn, Duration::from_secs(30)).await?;
+                waiting_login(&mut conn, Duration::from_secs(120)).await?;
                 let nick_name = conn.get_user_info()?;
                 tx.send(StateChange::LoggedIn(nick_name))?;
 
                 let news_list = vec!["https://www.xuexi.cn/lgpage/detail/index.html?id=1675585234174641917&item_id=1675585234174641917".to_string()];
                 let video_list :Vec<String>= vec![];
                 tx.send(StateChange::StartLearn)?;
-            match conn.try_study(&news_list, &video_list) {
-                Ok(_) => {
-                    info!("学习成功");
+                conn.try_study(&news_list, &video_list)?;
+                let n = conn.get_today_score()?;
+                Ok(n)
+            }) {
+                Ok(n) => {
+                    tx.send(StateChange::Complete(n))?;
                 }
                 Err(e) => {
-                    error!("学习失败: {}", e);
+                    error!("XxState 后台任务失败: {}", e);
+                    tx.send(StateChange::BrowserClosed(e))?
                 }
-            }
-                Ok(())
-            })
+            };
+            Ok(())
         });
-        let state = Self::default();
-        let mut state_mut = state.clone();
+        let state = self.state.clone();
         thread::spawn(move || {
             for x in rx.iter() {
                 match x {
                     StateChange::BrowserClosed(e) => {
                         error!("浏览器崩溃了: {}", e);
+                        state.write().unwrap().broken = true;
                     }
                     StateChange::Ready => {
                         info!("ready");
@@ -82,22 +98,23 @@ impl XxState {
                             "https://techxuexi.js.org/jump/techxuexi-20211023.html?".to_string();
                         s.extend(form_urlencoded::byte_serialize(ticket.as_bytes()));
                         info!("等待登陆: {}", s);
-                        state_mut.login_ticket = ticket;
+                        state.write().unwrap().login_ticket = ticket;
                     }
                     StateChange::LoggedIn(nick_name) => {
                         info!("登陆成功: {}", nick_name);
-                        state_mut.nickname = nick_name;
+                        state.write().unwrap().nick_name = nick_name;
                     }
                     StateChange::StartLearn => {
                         info!("开始学习");
                     }
                     StateChange::Complete(i) => {
                         info!("学习完成: {}", i);
+                        state.write().unwrap().score = Some(i);
                     }
                 }
             }
         });
-        state
+        Ok(())
     }
 }
 
@@ -126,11 +143,11 @@ async fn waiting_login(
         _ = check => {
             return Ok(())
         },
-        _ = tokio::time::sleep(Duration::from_secs(120)) => {
+        _ = tokio::time::sleep(timeout) => {
             warn!("等待登陆超时");
             return Err(anyhow!("等待登陆超时"))
         },
-    };
+    }
 }
 
 #[cfg(test)]
@@ -148,11 +165,14 @@ mod test {
             .build(manager)
             .await
             .unwrap();
-        let state = XxState::new(pool);
+        let state = XxState::new();
+        state.serve(pool)?;
         loop {
-            info!(state.nickname, state.login_ticket);
+            {
+                let s = state.state.read().unwrap();
+                info!("读取状态数据 {:?}", s);
+            }
             tokio::time::sleep(Duration::from_secs(10)).await;
         }
-        Ok(())
     }
 }
