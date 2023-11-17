@@ -1,0 +1,13 @@
+FROM hjin/dioxus-build:202308140541416b1535 as builder
+WORKDIR /build
+COPY . .
+RUN cd study_serv \
+    && dx build --release --features web \
+    && cargo build --release --features ssr
+
+FROM hjin/chrome:20231106065551772b5a
+COPY --from=builder /build/target/release/study_serv /usr/local/bin/study_serv
+COPY --from=builder /build/study_serv/dist /webser/www/dist
+ENV CHROME /usr/bin/google-chrome
+ENV RUST_LOG warn,study_serv=info,wx=info,study=info
+ENTRYPOINT ["study_serv"]

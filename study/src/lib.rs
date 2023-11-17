@@ -1,21 +1,21 @@
 mod eval;
 mod pool;
 mod qrcode;
+mod session_state;
 mod state;
-mod utils;
+pub mod utils;
 mod xx;
 
 use crate::eval::{get_today_score, get_today_tasks, get_user_info, scroll_to};
 pub use crate::pool::*;
 pub use crate::qrcode::*;
-use crate::utils::{get_one_tab, new_browser, reset_tabs, wait_qr};
+pub use crate::session_state::*;
+use crate::utils::{get_news_list, get_one_tab, get_video_list, new_browser, reset_tabs, wait_qr};
 pub use crate::xx::Xx;
 use anyhow::{anyhow, Result};
 use chrono::Local;
 use headless_chrome::browser::context::Context;
-use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
-use serde::Deserialize;
 use std::ops::Add;
 use std::thread;
 use std::time::Duration;
@@ -297,53 +297,10 @@ fn browse_video(browser: &Context<'_>, url: &str) -> Result<()> {
     Ok(())
 }
 
-#[derive(Deserialize, Debug)]
-struct News {
-    // #[serde(rename = "publishTime")]
-    // publish_time: String,
-    #[serde(rename = "auditTime")]
-    audit_time: String,
-    url: String,
-}
-
-#[instrument(skip_all)]
-async fn get_news_list() -> Result<Vec<String>> {
-    get_news_url("https://www.xuexi.cn/lgdata/1jscb6pu1n2.json")
-        .await
-        .map_err(|e| anyhow!("请求新闻列表失败: {}", e))
-}
-#[instrument(skip_all)]
-async fn get_video_list() -> Result<Vec<String>> {
-    get_news_url("https://www.xuexi.cn/lgdata/3o3ufqgl8rsn.json")
-        .await
-        .map_err(|e| anyhow!("请求视频列表失败: {}", e))
-}
-#[instrument]
-async fn get_news_url(api: &str) -> Result<Vec<String>> {
-    let resp = reqwest::get(api)
-        .await
-        .map_err(|e| anyhow!("请求列表失败: {}", e))?;
-    debug!("获取新闻列表 status code {}", resp.status());
-    let b = resp.text().await?;
-    let today = Local::now().format("%Y-%m-%d").to_string();
-    let r: Vec<News> = serde_json::from_str(&b)?;
-    let mut latest: Vec<String> = r
-        .iter()
-        .filter(|n| n.audit_time.starts_with(&today))
-        .map(|n| n.url.clone())
-        .collect();
-    let mut rng = thread_rng();
-    let shuffle: Vec<String> = r
-        .choose_multiple(&mut rng, 30)
-        .map(|n| n.url.clone())
-        .collect();
-    latest.extend(shuffle);
-    Ok(latest)
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
+    use serde::Deserialize;
     use wx::MP;
     #[derive(Deserialize)]
     struct Conf {

@@ -1,10 +1,12 @@
+use crate::utils::{get_news_list, get_video_list};
 use crate::{XxManager, XxManagerPool};
 use anyhow::{anyhow, Error, Result};
 use bb8::PooledConnection;
+use std::ops::Deref;
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, trace, warn};
 
 enum StateChange {
     BrowserClosed(Error),
@@ -14,12 +16,13 @@ enum StateChange {
     StartLearn,
     Complete(i64),
 }
-#[derive(Default, Debug)]
-struct State {
+#[derive(Default, Debug, Clone)]
+pub struct State {
     pub broken: bool,
-    pub login_ticket: String,
-    pub nick_name: String,
+    pub login_ticket: Option<String>,
+    pub nick_name: Option<String>,
     pub score: Option<i64>,
+    pub error: Option<String>,
 }
 
 #[derive(Clone)]
@@ -60,13 +63,14 @@ impl XxState {
                 tx.send(StateChange::Ready)?;
                 let ticket = conn.get_ticket();
                 tx.send(StateChange::WaitingLogin(ticket))?;
-                info!("got");
+                trace!("got");
                 waiting_login(&mut conn, Duration::from_secs(120)).await?;
                 let nick_name = conn.get_user_info()?;
                 tx.send(StateChange::LoggedIn(nick_name))?;
 
-                let news_list = vec!["https://www.xuexi.cn/lgpage/detail/index.html?id=1675585234174641917&item_id=1675585234174641917".to_string()];
-                let video_list :Vec<String>= vec![];
+                let news_list = get_news_list().await?;
+                let video_list = get_video_list().await?;
+
                 tx.send(StateChange::StartLearn)?;
                 conn.try_study(&news_list, &video_list)?;
                 let n = conn.get_today_score()?;
@@ -88,33 +92,66 @@ impl XxState {
                 match x {
                     StateChange::BrowserClosed(e) => {
                         error!("浏览器崩溃了: {}", e);
-                        state.write().unwrap().broken = true;
+                        let mut s = state.write().unwrap();
+                        s.error = Some(e.to_string());
+                        s.broken = true;
                     }
                     StateChange::Ready => {
-                        info!("ready");
+                        trace!("ready");
                     }
                     StateChange::WaitingLogin(ticket) => {
                         let mut s =
                             "https://techxuexi.js.org/jump/techxuexi-20211023.html?".to_string();
                         s.extend(form_urlencoded::byte_serialize(ticket.as_bytes()));
                         info!("等待登陆: {}", s);
-                        state.write().unwrap().login_ticket = ticket;
+                        state.write().unwrap().login_ticket = Some(ticket);
                     }
                     StateChange::LoggedIn(nick_name) => {
                         info!("登陆成功: {}", nick_name);
-                        state.write().unwrap().nick_name = nick_name;
+                        let mut s = state.write().unwrap();
+                        s.nick_name = Some(nick_name);
+                        s.login_ticket = None;
                     }
                     StateChange::StartLearn => {
                         info!("开始学习");
                     }
                     StateChange::Complete(i) => {
                         info!("学习完成: {}", i);
-                        state.write().unwrap().score = Some(i);
+                        let mut s = state.write().unwrap();
+                        s.score = Some(i);
+                        s.broken = true;
                     }
                 }
             }
         });
         Ok(())
+    }
+
+    pub fn inner_state(&self) -> State {
+        let s = self.state.read().unwrap();
+        (*s.deref()).clone()
+    }
+    pub fn get_ticket(&self) -> Result<String> {
+        let s = self.state.read().unwrap();
+        match s.login_ticket.clone() {
+            Some(t) => Ok(t),
+            None => Err(anyhow!("还没有获取到 ticket")),
+        }
+    }
+
+    pub fn get_nick_name(&self) -> Result<String> {
+        let s = self.state.read().unwrap();
+        match s.nick_name.clone() {
+            Some(t) => Ok(t),
+            None => Err(anyhow!("还没有获取到 nick_name")),
+        }
+    }
+    pub fn get_score(&self) -> Result<i64> {
+        let s = self.state.read().unwrap();
+        match s.score {
+            Some(t) => Ok(t),
+            None => Err(anyhow!("还没有获取到 score")),
+        }
     }
 }
 
@@ -129,7 +166,7 @@ async fn waiting_login(
                     if b {
                         break;
                     } else {
-                        info!("还没登陆");
+                        debug!("还没登陆");
                         tokio::time::sleep(Duration::from_secs(5)).await;
                     }
                 }
@@ -171,8 +208,12 @@ mod test {
             {
                 let s = state.state.read().unwrap();
                 info!("读取状态数据 {:?}", s);
+                if s.broken {
+                    break;
+                }
             }
             tokio::time::sleep(Duration::from_secs(10)).await;
         }
+        Ok(())
     }
 }

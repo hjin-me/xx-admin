@@ -8,6 +8,9 @@ use rand::{thread_rng, Rng};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use chrono::Local;
+use rand::seq::SliceRandom;
+use serde::Deserialize;
 use tracing::{debug, instrument, trace};
 
 #[instrument(skip_all)]
@@ -99,6 +102,49 @@ pub fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
         true,
     )?;
     Ok(png_data)
+}
+
+#[instrument(skip_all)]
+pub async fn get_news_list() -> Result<Vec<String>> {
+    get_some_url("https://www.xuexi.cn/lgdata/1jscb6pu1n2.json")
+        .await
+        .map_err(|e| anyhow!("请求新闻列表失败: {}", e))
+}
+#[instrument(skip_all)]
+pub async fn get_video_list() -> Result<Vec<String>> {
+    get_some_url("https://www.xuexi.cn/lgdata/3o3ufqgl8rsn.json")
+        .await
+        .map_err(|e| anyhow!("请求视频列表失败: {}", e))
+}
+#[derive(Deserialize, Debug)]
+struct News {
+    // #[serde(rename = "publishTime")]
+    // publish_time: String,
+    #[serde(rename = "auditTime")]
+    audit_time: String,
+    url: String,
+}
+#[instrument]
+async fn get_some_url(api: &str) -> Result<Vec<String>> {
+    let resp = reqwest::get(api)
+        .await
+        .map_err(|e| anyhow!("请求列表失败: {}", e))?;
+    debug!("获取新闻列表 status code {}", resp.status());
+    let b = resp.text().await?;
+    let today = Local::now().format("%Y-%m-%d").to_string();
+    let r: Vec<News> = serde_json::from_str(&b)?;
+    let mut latest: Vec<String> = r
+        .iter()
+        .filter(|n| n.audit_time.starts_with(&today))
+        .map(|n| n.url.clone())
+        .collect();
+    let mut rng = thread_rng();
+    let shuffle: Vec<String> = r
+        .choose_multiple(&mut rng, 30)
+        .map(|n| n.url.clone())
+        .collect();
+    latest.extend(shuffle);
+    Ok(latest)
 }
 
 #[cfg(test)]

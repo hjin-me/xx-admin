@@ -18,9 +18,11 @@ use dioxus_fullstack::{
 };
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
+use tracing::info;
 
 fn app(cx: Scope) -> Element {
     let text = use_state(cx, || "...".to_string());
+    let s_id = use_state(cx, || 0u64);
 
     cx.render(rsx! {
         div {
@@ -38,12 +40,27 @@ fn app(cx: Scope) -> Element {
         }
         button {
             onclick: move |_| {
-                to_owned![text];
+                to_owned![s_id, text];
                 async move {
-                    if let Ok(data) = get_server_data().await {
-                        println!("Client received: {}", data);
+                    if let Ok(data) = create_task().await {
+                        info!("Client received: {}", data);
+                        s_id.set(data);
+
+                        if let Ok(data) = get_ticket(data).await {
+                            text.set(format!("dtxuexi://appclient/page/study_feeds?url={}",data.clone()));
+                        }
+                    }
+                }
+            },
+            "创建一个任务"
+        }
+        button {
+            onclick: move |_| {
+                to_owned![s_id, text];
+                async move {
+                    if let Ok(data) = get_ticket(s_id.get().clone()).await {
+                        info!("Client received: {}", data);
                         text.set(format!("dtxuexi://appclient/page/study_feeds?url={}",data.clone()));
-                        post_server_data(data).await.unwrap();
                     }
                 }
             },
@@ -52,25 +69,31 @@ fn app(cx: Scope) -> Element {
     })
 }
 
-#[server]
-async fn post_server_data(data: String) -> Result<(), ServerFnError> {
-    let axum::extract::Host(host): axum::extract::Host = extract().await?;
-    println!("Server received: {}", data);
-    println!("{:?}", host);
+// #[server]
+// async fn post_server_data(data: String) -> Result<(), ServerFnError> {
+//     let axum::extract::Host(host): axum::extract::Host = extract().await?;
+//     println!("Server received: {}", data);
+//     println!("{:?}", host);
+//
+//     Ok(())
+// }
 
-    Ok(())
+#[server(GetTicket, "/xx/api")]
+async fn get_ticket(s_id: u64) -> Result<String, ServerFnError> {
+    match xx::try_get_ticket(s_id).await {
+        Ok(s) => Ok(s),
+        Err(e) => Ok(format!("{}", e)),
+    }
 }
 
-#[server]
-async fn get_server_data() -> Result<String, ServerFnError> {
-    use axum::Extension;
-    use study::{bb8, XxManager};
-    let Extension(xx_pool): Extension<bb8::Pool<XxManager>> = extract().await?;
-    Ok(match xx::run(xx_pool).await {
-        Ok(s) => s,
-        Err(e) => format!("{}", e),
-    })
-    // Ok(reqwest::get("https://httpbin.org/ip").await?.text().await?)
+#[server(CreateTask, "/xx/api")]
+async fn create_task() -> Result<u64, ServerFnError> {
+    match xx::start_new_task().await {
+        Ok(s) => Ok(s),
+        Err(e) => Err(dioxus_fullstack::prelude::ServerFnError::ServerError(
+            e.to_string(),
+        )),
+    }
 }
 
 fn main() {
@@ -85,39 +108,33 @@ fn main() {
         tracing_subscriber::fmt::init();
         use axum::routing::*;
         use axum::Extension;
-        use study::{bb8, XxManager};
+        use study::{bb8, StateSession, XxManager};
         tokio::runtime::Runtime::new()
             .unwrap()
             .block_on(async move {
                 let manager = XxManager::new();
                 let pool = bb8::Pool::builder()
-                    .max_size(2)
-                    .min_idle(Some(1))
+                    .max_size(3)
+                    .min_idle(Some(2))
                     .idle_timeout(Some(Duration::from_secs(170)))
                     // .connection_timeout(std::time::Duration::from_secs(30))
                     .build(manager)
                     .await
                     .unwrap();
 
+                let ss = StateSession::new(&pool);
+
                 // build our application with some routes
                 let app = Router::new()
                     // Server side render the application, serve static assets, and register server functions
-                    .serve_dioxus_application("", ServeConfigBuilder::new(app, ()))
-                    .layer(Extension(pool));
-                // .layer(
-                //     axum_session_auth::AuthSessionLayer::<
-                //         crate::auth::User,
-                //         i64,
-                //         axum_session_auth::SessionSqlitePool,
-                //         sqlx::SqlitePool,
-                //     >::new(Some(pool))
-                //     .with_config(auth_config),
-                // )
-                // .layer(axum_session::SessionLayer::new(session_store));
+                    .serve_dioxus_application("/xx/api", ServeConfigBuilder::new(app, ()))
+                    .layer(Extension(pool))
+                    .layer(Extension(ss));
 
                 // run it
                 let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
 
+                info!("http://127.0.0.1:3000");
                 axum::Server::bind(&addr)
                     .serve(app.into_make_service())
                     .await

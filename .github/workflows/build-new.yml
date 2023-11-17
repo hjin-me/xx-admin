@@ -1,0 +1,21 @@
+name: Build Image
+on:
+  push:
+    branches:
+      - study # Push events on master branch
+    tags:
+      - "**"
+jobs:
+  rust:
+    name: Rust Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Publish to Registry
+        id: publish
+        uses: elgohr/Publish-Docker-Github-Action@v5
+        with:
+          name: hjin/study
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          dockerfile: study_serv/Dockerfile

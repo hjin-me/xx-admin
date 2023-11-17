@@ -1,9 +1,10 @@
 use anyhow::{anyhow, Result};
+use dioxus_fullstack::prelude::extract;
 use serde::{Deserialize, Serialize};
 use std::thread;
 use std::time::Duration;
 use study::bb8::Pool;
-use study::{bb8, XxManager};
+use study::{bb8, StateSession, XxManager};
 use tokio::time;
 use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
@@ -15,67 +16,39 @@ pub struct StudyConfig {
     pub agent_id: i64,
     pub app_caller: String,
 }
-pub async fn run(pool: Pool<XxManager>) -> Result<String> {
+
+pub async fn try_get_ticket(s_id: u64) -> Result<String> {
+    use axum::Extension;
+    use study::StateSession;
+    let Extension(ss): Extension<StateSession> = extract().await?;
+
+    let state = ss.get(s_id).ok_or(anyhow!("没有找到状态数据"))?;
+
+    for _ in 0..10 {
+        match state.get_ticket() {
+            Ok(s) => {
+                let mut ticket = "".to_string();
+                ticket.extend(form_urlencoded::byte_serialize(s.as_bytes()));
+                return Ok(ticket);
+            }
+            Err(e) => {
+                warn!("获取 ticket 失败: {}", e);
+            }
+        }
+        sleep(Duration::from_millis(50)).await;
+    }
+    Err(anyhow!("获取 ticket 失败"))
+}
+
+pub async fn start_new_task() -> Result<u64> {
+    use axum::Extension;
+    use study::StateSession;
+    let Extension(ss): Extension<StateSession> = extract().await?;
     info!("{:?}", tokio::runtime::Handle::current().runtime_flavor());
 
-    info!("pool get");
-    let mut conn = match pool.get_owned().await {
-        Ok(conn) => conn,
-        Err(e) => {
-            match e {
-                bb8::RunError::User(e) => {
-                    error!("获取连接失败: {}", e);
-                }
-                bb8::RunError::TimedOut => {
-                    error!("获取连接超时");
-                }
-            }
-            return Err(anyhow!("获取连接池失败了"));
-        }
-    };
-    info!("got");
+    let s_id = ss.new_state()?;
 
-    let ticket = conn.get_ticket();
-    info!("ticket = {}", ticket);
-    thread::spawn(move || {
-        tokio::runtime::Runtime::new().unwrap().block_on(async move {
-            tokio::select! {
-               _ = async {loop {
-                match conn.check_login() {
-                    Ok(b) => if b {
-                        break;
-                    } else {
-                        trace!("还没登陆");
-                        sleep(Duration::from_secs(5)).await;
-                    },
-                    Err(e) => {
-                        debug!("判断登陆状态失败: {}", e);
-                    }
-                }
-                }
-
-                   let news_list = vec!["https://www.xuexi.cn/lgpage/detail/index.html?id=1675585234174641917&item_id=1675585234174641917".to_string()];
-            let video_list :Vec<String>= vec![];
-            match conn.try_study(&news_list, &video_list) {
-                Ok(_) => {
-                    info!("学习成功");
-                }
-                Err(e) => {
-                    error!("学习失败: {}", e);
-                }
-            }
-            } => {},
-               _ = time::sleep(Duration::from_secs(30)) => {
-                    warn!("等待登陆超时");
-                },
-            }
-            drop(conn)
-       })
-    });
-
-    let mut app_caller = "".to_string();
-    app_caller.extend(form_urlencoded::byte_serialize(ticket.as_bytes()));
-    Ok(app_caller)
+    Ok(s_id)
 }
 
 #[cfg(test)]
