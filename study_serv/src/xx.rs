@@ -27,9 +27,7 @@ pub async fn try_get_ticket(s_id: u64) -> Result<String> {
     for i in 1..11 {
         match state.get_ticket() {
             Ok(s) => {
-                let mut ticket = "".to_string();
-                ticket.extend(form_urlencoded::byte_serialize(s.as_bytes()));
-                return Ok(ticket);
+                return Ok(s);
             }
             Err(e) => {
                 warn!("获取 ticket 失败[第{}次]: {}", i, e);

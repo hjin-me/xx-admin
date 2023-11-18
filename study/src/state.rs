@@ -37,6 +37,7 @@ pub struct Ticket {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub enum State {
     Broken(String),
+    Prepare,
     Init,
     Ready,
     WaitingLogin(Ticket),
@@ -54,7 +55,7 @@ pub struct XxState {
 impl XxState {
     pub fn new() -> Self {
         Self {
-            state: Arc::new(RwLock::new(State::Init)),
+            state: Arc::new(RwLock::new(State::Prepare)),
         }
     }
 
@@ -118,6 +119,8 @@ impl XxState {
                     }
                     StateChange::Ready => {
                         trace!("ready");
+                        let mut s = state.write().unwrap();
+                        *s = State::Ready;
                     }
                     StateChange::WaitingLogin(ticket) => {
                         let mut s =
@@ -143,6 +146,10 @@ impl XxState {
                 }
             }
         });
+        {
+            let mut s = self.state.write().unwrap();
+            *s = State::Init;
+        }
         Ok(())
     }
 

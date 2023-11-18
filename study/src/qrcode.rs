@@ -1,4 +1,6 @@
 use anyhow::{anyhow, Result};
+use qrcode_generator::QrCodeEcc;
+
 pub fn decode_qr(b: &[u8]) -> Result<String> {
     let img = image::load_from_memory(b)?;
 
@@ -15,6 +17,10 @@ pub fn decode_qr(b: &[u8]) -> Result<String> {
     })
 }
 
+pub fn gen_qr(d: &str) -> Result<Vec<u8>> {
+    let result: Vec<u8> = qrcode_generator::to_png_to_vec(d, QrCodeEcc::Low, 320)?;
+    Ok(result)
+}
 #[cfg(test)]
 mod test {
     use super::*;
@@ -25,5 +31,9 @@ mod test {
         let r = decode_qr(b).unwrap();
 
         assert_eq!(r.as_str(), "https://login.xuexi.cn/login/qrcommit?showmenu=false&code=qr:E7298D91-9D75-44EF-BCBE-CAB558A92158&appId=dingoankubyrfkttorhpou");
+    }
+    #[test]
+    fn test_gen_qr() {
+        gen_qr("").unwrap();
     }
 }

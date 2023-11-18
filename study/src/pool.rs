@@ -44,10 +44,12 @@ impl bb8::ManageConnection for XxManager {
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::utils::{get_news_list, get_video_list};
     use std::thread;
     use std::thread::spawn;
     use std::time::Duration;
     use tracing::{error, info};
+
     #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
     async fn test_pool() {
         tracing_subscriber::fmt::init();
@@ -107,8 +109,8 @@ mod test {
                             }
                             thread::sleep(Duration::from_secs(10));
                         }
-                        let news_list = crate::get_news_list().await.expect("获取新闻列表失败");
-                        let video_list = crate::get_video_list().await.expect("获取视频列表失败");
+                        let news_list = get_news_list().await.expect("获取新闻列表失败");
+                        let video_list = get_video_list().await.expect("获取视频列表失败");
                         _ = dbg!(conn.try_study(&news_list, &video_list));
                     });
             }));

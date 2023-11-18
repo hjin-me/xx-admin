@@ -10,10 +10,11 @@
 #[cfg(feature = "ssr")]
 mod backend;
 mod home;
+mod qr;
 mod state;
+mod wx_redirect;
 #[cfg(feature = "ssr")]
 mod xx;
-mod sleep;
 
 use crate::home::app;
 use dioxus::prelude::*;
@@ -48,7 +49,6 @@ fn main() {
                     .max_size(10)
                     .min_idle(Some(1))
                     .idle_timeout(Some(Duration::from_secs(170)))
-                    // .connection_timeout(std::time::Duration::from_secs(30))
                     .build(manager)
                     .await
                     .unwrap();

@@ -64,10 +64,10 @@ mod test {
         loop {
             {
                 let s = ss.get(s_id).ok_or(anyhow!("没有找到状态数据"))?;
-                let is = s.inner_state();
+                let is = s.get_state();
 
                 info!("读取状态数据 {:?}", is);
-                if is.broken {
+                if let crate::state::State::Complete(_) = is {
                     break;
                 }
             }

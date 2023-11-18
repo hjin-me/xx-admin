@@ -24,10 +24,11 @@ opentelemetry = { version = "0.21.0", features = ["trace"], optional = true }
 opentelemetry_sdk = { version = "0.21.0", features = ["trace", "rt-tokio"], optional = true }
 opentelemetry-stdout = { version = "0.2.0", features = ["trace"], optional = true }
 opentelemetry-otlp = { version = "0.14.0", features = ["default"], optional = true }
-wasm-bindgen = "0.2.88"
 wasm-bindgen-futures = "0.4.38"
-js-sys = "0.3.65"
-web-sys = { version = "0.3.65" , features = ["WorkerGlobalScope"]}
+futures-util = "0.3.29"
+qrcode-generator = "4.1.9"
+base64 = "0.21.5"
+gloo = { version = "0.10.0", features = ["futures"] }
 
 [features]
 default = []
