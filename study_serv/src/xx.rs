@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use std::thread;
 use std::time::Duration;
 use study::bb8::Pool;
-use study::{bb8, StateSession, XxManager};
+use study::{bb8, State, StateSession, XxManager};
 use tokio::time;
 use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
@@ -58,6 +58,16 @@ pub async fn try_get_current_user(s_id: u64) -> Result<String> {
         sleep(Duration::from_millis(50)).await;
     }
     Err(anyhow!("获取用户名失败"))
+}
+
+pub async fn try_get_state(s_id: u64) -> Result<State> {
+    use axum::Extension;
+    use study::StateSession;
+    let Extension(ss): Extension<StateSession> = extract().await?;
+
+    let state = ss.get(s_id).ok_or(anyhow!("没有找到状态数据"))?;
+
+    Ok(state.get_state())
 }
 
 pub async fn start_new_task() -> Result<u64> {

@@ -1,5 +1,4 @@
 use crate::eval::{get_today_score, get_user_info};
-use crate::try_study;
 use crate::utils::{get_login_ticket, get_one_tab, new_browser};
 use anyhow::{anyhow, Result};
 use headless_chrome::browser::context::Context;
@@ -7,6 +6,7 @@ use headless_chrome::Browser;
 use std::ops::Add;
 use std::time::Duration;
 use tracing::trace;
+use crate::try_study;
 
 #[derive(Clone)]
 pub struct Xx {

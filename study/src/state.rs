@@ -1,39 +1,60 @@
+#[cfg(feature = "server")]
 use crate::utils::{get_news_list, get_video_list};
+#[cfg(feature = "server")]
 use crate::{XxManager, XxManagerPool};
+#[cfg(feature = "server")]
 use anyhow::{anyhow, Error, Result};
+#[cfg(feature = "server")]
 use bb8::PooledConnection;
+use serde::{Deserialize, Serialize};
+#[cfg(feature = "server")]
 use std::ops::Deref;
+#[cfg(feature = "server")]
 use std::sync::{Arc, RwLock};
+#[cfg(feature = "server")]
 use std::thread;
+#[cfg(feature = "server")]
 use std::time::Duration;
+// use serde::{Deserialize, Serialize};
+#[cfg(feature = "server")]
 use tracing::{debug, error, info, trace, warn};
 
+#[cfg(feature = "server")]
 enum StateChange {
     BrowserClosed(Error),
     Ready,
     WaitingLogin(String),
     LoggedIn(String),
     StartLearn,
-    Complete(i64),
+    Complete((String, i64)),
 }
-#[derive(Default, Debug, Clone)]
-pub struct State {
-    pub broken: bool,
-    pub login_ticket: Option<String>,
-    pub nick_name: Option<String>,
-    pub score: Option<i64>,
-    pub error: Option<String>,
+#[cfg(feature = "hydrate")]
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub struct Ticket {
+    pub ticket: String,
+}
+#[cfg(feature = "hydrate")]
+#[derive(Clone, Deserialize, Serialize, Debug)]
+pub enum State {
+    Broken(String),
+    Init,
+    Ready,
+    WaitingLogin(Ticket),
+    Logged(String),
+    Complete((String, i64)),
 }
 
+#[cfg(feature = "server")]
 #[derive(Clone)]
 pub struct XxState {
     state: Arc<RwLock<State>>,
 }
 
+#[cfg(feature = "server")]
 impl XxState {
     pub fn new() -> Self {
         Self {
-            state: Arc::new(RwLock::new(State::default())),
+            state: Arc::new(RwLock::new(State::Init)),
         }
     }
 
@@ -66,7 +87,7 @@ impl XxState {
                 trace!("got");
                 waiting_login(&mut conn, Duration::from_secs(120)).await?;
                 let nick_name = conn.get_user_info()?;
-                tx.send(StateChange::LoggedIn(nick_name))?;
+                tx.send(StateChange::LoggedIn(nick_name.clone()))?;
 
                 let news_list = get_news_list().await?;
                 let video_list = get_video_list().await?;
@@ -74,10 +95,10 @@ impl XxState {
                 tx.send(StateChange::StartLearn)?;
                 conn.try_study(&news_list, &video_list)?;
                 let n = conn.get_today_score()?;
-                Ok(n)
+                Ok((nick_name, n))
             }) {
-                Ok(n) => {
-                    tx.send(StateChange::Complete(n))?;
+                Ok(r) => {
+                    tx.send(StateChange::Complete(r))?;
                 }
                 Err(e) => {
                     error!("XxState 后台任务失败: {}", e);
@@ -93,8 +114,7 @@ impl XxState {
                     StateChange::BrowserClosed(e) => {
                         error!("浏览器崩溃了: {}", e);
                         let mut s = state.write().unwrap();
-                        s.error = Some(e.to_string());
-                        s.broken = true;
+                        *s = State::Broken(e.to_string());
                     }
                     StateChange::Ready => {
                         trace!("ready");
@@ -104,22 +124,21 @@ impl XxState {
                             "https://techxuexi.js.org/jump/techxuexi-20211023.html?".to_string();
                         s.extend(form_urlencoded::byte_serialize(ticket.as_bytes()));
                         info!("等待登陆: {}", s);
-                        state.write().unwrap().login_ticket = Some(ticket);
+                        let mut s = state.write().unwrap();
+                        *s = State::WaitingLogin(Ticket { ticket })
                     }
                     StateChange::LoggedIn(nick_name) => {
                         info!("登陆成功: {}", nick_name);
                         let mut s = state.write().unwrap();
-                        s.nick_name = Some(nick_name);
-                        s.login_ticket = None;
+                        *s = State::Logged(nick_name);
                     }
                     StateChange::StartLearn => {
                         info!("开始学习");
                     }
-                    StateChange::Complete(i) => {
-                        info!("学习完成: {}", i);
+                    StateChange::Complete(r) => {
+                        info!("学习完成: {} {}", r.0, r.1);
                         let mut s = state.write().unwrap();
-                        s.score = Some(i);
-                        s.broken = true;
+                        *s = State::Complete(r);
                     }
                 }
             }
@@ -127,37 +146,39 @@ impl XxState {
         Ok(())
     }
 
-    pub fn inner_state(&self) -> State {
+    pub fn get_state(&self) -> State {
         let s = self.state.read().unwrap();
         (*s.deref()).clone()
     }
+
     pub fn get_ticket(&self) -> Result<String> {
-        let s = self.state.read().unwrap();
-        match s.login_ticket.clone() {
-            Some(t) => Ok(t),
-            None => Err(anyhow!("还没有获取到 ticket")),
+        let s = self.get_state();
+        match s {
+            State::WaitingLogin(t) => Ok(t.ticket.clone()),
+            _ => Err(anyhow!("还没有获取到 ticket")),
         }
     }
 
     pub fn get_nick_name(&self) -> Result<String> {
-        let s = self.state.read().unwrap();
-        if s.login_ticket.is_some() {
-            return Err(anyhow!("当前用户还未扫码登陆"));
-        }
-        match s.nick_name.clone() {
-            Some(t) => Ok(t),
-            None => Err(anyhow!("还没有获取到 nick_name")),
+        let s = self.get_state();
+        match s {
+            State::WaitingLogin(_) => Err(anyhow!("还没有登陆")),
+            State::Logged(n) => Ok(n.clone()),
+            _ => Err(anyhow!("还没有获取到 nick_name")),
         }
     }
     pub fn get_score(&self) -> Result<i64> {
-        let s = self.state.read().unwrap();
-        match s.score {
-            Some(t) => Ok(t),
-            None => Err(anyhow!("还没有获取到 score")),
+        let s = self.get_state();
+        match s {
+            State::WaitingLogin(_) => Err(anyhow!("还没有登陆")),
+            State::Logged(_) => Err(anyhow!("还没有开始学习")),
+            State::Complete((_, t)) => Ok(t),
+            _ => Err(anyhow!("还没有获取到 score")),
         }
     }
 }
 
+#[cfg(feature = "server")]
 async fn waiting_login(
     conn: &mut PooledConnection<'_, XxManager>,
     timeout: Duration,
@@ -190,7 +211,7 @@ async fn waiting_login(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(feature = "server", test))]
 mod test {
     use super::*;
     #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
@@ -209,10 +230,18 @@ mod test {
         state.serve(pool)?;
         loop {
             {
-                let s = state.state.read().unwrap();
+                let s = state.get_state();
                 info!("读取状态数据 {:?}", s);
-                if s.broken {
-                    break;
+                match s {
+                    State::Broken(e) => {
+                        error!("浏览器崩溃了: {}", e);
+                        break;
+                    }
+                    State::Complete((n, t)) => {
+                        info!("学习完成: {} {}", n, t);
+                        break;
+                    }
+                    _ => {}
                 }
             }
             tokio::time::sleep(Duration::from_secs(10)).await;
@@ -220,3 +249,22 @@ mod test {
         Ok(())
     }
 }
+
+// #[derive(Deserialize, Serialize)]
+// pub struct Ticket {
+//     pub url: String,
+//     pub ticket: String,
+//     pub data_uri: String, // data:image/png;base64,i
+// }
+// impl Ticket {
+//     pub fn new(u: &str) -> Self {
+//         let mut ticket = "".to_string();
+//         ticket.extend(form_urlencoded::byte_serialize(u.as_bytes()));
+//         Self {
+//             url: u.to_string(),
+//             ticket,
+//             data_uri: "data:image/png;base64,".to_string(),
+//         }
+//     }
+// }
+//
