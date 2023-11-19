@@ -39,6 +39,7 @@ pub fn get_user_info(tab: &Arc<Tab>) -> Result<String> {
             Err(anyhow!("执行脚本获取数据失败"))
         }
     }?;
+    debug!("当前用户名是 {:?}", result.data.nick);
     Ok(result.data.nick)
 }
 

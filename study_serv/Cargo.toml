@@ -1,6 +1,6 @@
 [package]
 name = "study_serv"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 
 
@@ -35,6 +35,15 @@ clap = { version = "4.4.8", features = ["derive", "error-context", "help", "std"
 
 [features]
 default = []
-ssr = ["axum", "tokio/full", "dioxus-fullstack/axum", "toml", "study/default", "study_core/default", "wx", "tracing-opentelemetry", "opentelemetry", "opentelemetry_sdk", "opentelemetry-stdout", "opentelemetry-otlp", "clap"]
-web = ["dioxus-fullstack/web", "tokio/time", "study_core/hydrate"]
+ssr = ["axum", "tokio/full", "dioxus-fullstack/axum", "dioxus-fullstack/router", "toml", "study/default", "study_core/default", "wx", "tracing-opentelemetry", "opentelemetry", "opentelemetry_sdk", "opentelemetry-stdout", "opentelemetry-otlp", "clap"]
+web = ["dioxus-fullstack/web", "dioxus-fullstack/router", "tokio/time", "study_core/hydrate"]
 dev = []
+
+
+
+[profile.release]
+opt-level = "z"     # Optimize for size.
+lto = true          # Enable Link Time Optimization
+codegen-units = 1   # Reduce number of codegen units to increase optimizations.
+panic = "abort"     # Abort on panic
+strip = true        # Automatically strip symbols from the binary.

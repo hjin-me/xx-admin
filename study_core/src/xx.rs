@@ -25,10 +25,10 @@ impl Xx {
                 Ok(())
             }) {
                 Ok(_) => {
-                    info!("XxState 后台任务完成");
+                    info!("study 后台任务完成");
                 }
                 Err(e) => {
-                    error!("XxState 后台任务失败: {}", e);
+                    error!("study 后台任务失败: {}", e);
                     tx.send(StateChange::BrowserClosed(e))?
                 }
             };

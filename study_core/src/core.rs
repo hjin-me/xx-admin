@@ -19,10 +19,16 @@ pub async fn new_xx_task_bg(tx: Sender<StateChange>) -> Result<()> {
     let ctx = browser.new_context()?;
     tx.send(StateChange::Init)?;
 
-    let login_ticket = get_login_ticket(&ctx)?;
-    tx.send(StateChange::WaitingLogin(login_ticket.0.clone()))?;
+    loop {
+        let login_ticket = get_login_ticket(&ctx)?;
+        tx.send(StateChange::WaitingLogin(login_ticket.0.clone()))?;
 
-    waiting_login(&ctx, Duration::from_secs(130)).await?;
+        if let Ok(()) = waiting_login(&ctx, Duration::from_secs(130)).await {
+            break;
+        } else {
+            tx.send(StateChange::Ready)?;
+        }
+    }
 
     let nick_name = {
         let tab = get_xuexi_tab(&ctx)?;
@@ -40,11 +46,12 @@ pub async fn new_xx_task_bg(tx: Sender<StateChange>) -> Result<()> {
         let tab = get_xuexi_tab(&ctx)?;
         get_today_score(&tab)?
     };
+    debug!(nick_name = &nick_name, "今天学习总分为[{}] {}", nick_name, n);
     tx.send(StateChange::Complete((nick_name, n)))?;
     Ok(())
 }
 
-#[instrument(skip_all)]
+#[instrument(skip_all, fields(nick_name = nick_name))]
 pub fn try_study(
     browser: &Context<'_>,
     tx: Sender<StateChange>,
@@ -190,7 +197,6 @@ async fn waiting_login(ctx: &Context<'_>, timeout: Duration) -> Result<()> {
             return Ok(())
         },
         _ = tokio::time::sleep(timeout) => {
-            warn!("等待登陆超时");
             return Err(anyhow!("等待登陆超时"))
         },
     }
