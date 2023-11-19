@@ -11,7 +11,7 @@ use rand::{thread_rng, Rng};
 use std::sync::mpsc::Sender;
 use std::thread;
 use std::time::Duration;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 #[instrument(skip_all)]
 pub async fn new_xx_task_bg(tx: Sender<StateChange>) -> Result<()> {
@@ -46,7 +46,10 @@ pub async fn new_xx_task_bg(tx: Sender<StateChange>) -> Result<()> {
         let tab = get_xuexi_tab(&ctx)?;
         get_today_score(&tab)?
     };
-    debug!(nick_name = &nick_name, "今天学习总分为[{}] {}", nick_name, n);
+    debug!(
+        nick_name = &nick_name,
+        "今天学习总分为[{}] {}", nick_name, n
+    );
     tx.send(StateChange::Complete((nick_name, n)))?;
     Ok(())
 }
@@ -182,7 +185,7 @@ async fn waiting_login(ctx: &Context<'_>, timeout: Duration) -> Result<()> {
                     if b {
                         break;
                     } else {
-                        debug!("还没登陆");
+                        trace!("还没登陆");
                         tokio::time::sleep(Duration::from_secs(5)).await;
                     }
                 }

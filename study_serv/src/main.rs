@@ -75,8 +75,15 @@ async fn main() {
         .layer(Extension(ss));
 
     // run it
+    #[cfg(not(feature = "dev"))]
+    let app = app.layer(
+        tower::ServiceBuilder::new()
+            .layer(tower_http::trace::TraceLayer::new_for_http())
+            .layer(tower_http::compression::CompressionLayer::new()),
+    );
     #[cfg(feature = "dev")]
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
+
     #[cfg(not(feature = "dev"))]
     let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 3000));
 
