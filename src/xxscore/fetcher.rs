@@ -212,7 +212,7 @@ async fn loop_login(tab: &Arc<Tab>, login_user: &str, mp: &MP, app_caller: &str)
     info!("等待二维码刷新");
     let img_data = wait_qr(tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;
     info!("获取登陆二维码成功");
-    let login_url = study::decode_qr(&img_data)?;
+    let login_url = study_core::decode_qr(&img_data)?;
     let mut app_caller = app_caller.to_string();
     app_caller.extend(form_urlencoded::byte_serialize(login_url.as_bytes()));
     let login_url = app_caller.as_str();

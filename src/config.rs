@@ -15,20 +15,3 @@ pub struct AdminConfig {
     pub corp_secret: String,
     pub agent_id: i64,
 }
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct StudyConfig {
-    pub proxy_server: Option<String>,  // 代理服务器地址
-    pub study_schedule: Vec<Schedule>, // 学习计划
-    pub app_caller: String,
-
-    pub corp_id: String,
-    pub corp_secret: String,
-    pub agent_id: i64,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct Schedule {
-    pub target: String,
-    pub hour: u32,   //发送通知的小时
-    pub minute: u32, //发送通知的分钟
-}
