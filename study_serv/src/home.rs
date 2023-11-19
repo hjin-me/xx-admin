@@ -14,6 +14,27 @@ use study::{State, Ticket};
 use tracing::info;
 
 pub fn app(cx: Scope) -> Element {
+    cx.render(rsx! {
+        Layout { Study {} }
+    })
+}
+#[derive(Props)]
+struct LayoutProps<'a> {
+    children: Element<'a>,
+}
+fn Layout<'a>(cx: Scope<'a, LayoutProps<'a>>) -> Element {
+    cx.render(rsx! {
+        div { class: "relative bg-white dark:bg-dark",
+            div { class: "container mx-auto mt-8",
+                div { class: "flex flex-wrap items-center mx-4",
+                    div { class: "w-full px-4 lg:w-5/12", &cx.props.children }
+                }
+            }
+        }
+    })
+}
+
+pub fn Study(cx: Scope) -> Element {
     use futures_util::stream::StreamExt;
     let s_id = use_state(cx, || 0u64);
     let err_msg = use_state(cx, || "".to_string());
@@ -50,7 +71,8 @@ pub fn app(cx: Scope) -> Element {
                 h1 { "1. 点击按钮" }
                 p {
                     button {
-                        class: "rounded-md bg-indigo-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600",
+                        class: "middle none center mr-4 rounded-lg bg-blue-500 py-3 px-6 font-sans text-xs font-bold uppercase text-white shadow-md shadow-blue-500/20 transition-all hover:shadow-lg hover:shadow-blue-500/40 focus:opacity-[0.85] focus:shadow-none active:opacity-[0.85] active:shadow-none disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none",
+                        r#type: "button",
                         onclick: move |_| {
                             to_owned![s_id, err_msg, tx];
                             async move {
@@ -81,7 +103,13 @@ pub fn app(cx: Scope) -> Element {
                 let img = d.1;
                 rsx! {
                     h1 { "2. 点击下方登录：" }
-                    pre { a { id: "login", target: "_blank", rel: "noopener", href: "{u}", "{u}" } }
+                    a {
+                        class: "text-blue-500 underline hover:text-blue-700 whitespace-normal break-all",
+                        target: "_blank",
+                        rel: "noopener",
+                        href: "{u}",
+                        "{u}"
+                    }
                     h3 { "点击上方链接登录，或使用学习强国扫描下方二维码" }
                     img { src: "{img}" }
                 }
@@ -92,7 +120,12 @@ pub fn app(cx: Scope) -> Element {
         },
         State::Logged(nick_name) => {
             let nick_name = nick_name.clone();
-            rsx! { p { "Hi {nick_name}, 你已经扫码登陆，即将开始学习。" } }
+            rsx! {
+                p { class: "block font-sans text-xl font-normal leading-relaxed text-inherit antialiased",
+                    "Hi {nick_name}："
+                }
+                p { "你已经扫码登陆，学习即将开始，可以关闭浏览器了。" }
+            }
         }
         State::Broken(e) => {
             let err_msg = e.clone();
@@ -102,7 +135,12 @@ pub fn app(cx: Scope) -> Element {
             }
         }
         State::Complete((nick_name, today_score)) => {
-            rsx! { p { "{nick_name}，今日学习的分数是 {today_score}" } }
+            rsx! {
+                p { class: "block font-sans text-xl font-normal leading-relaxed text-inherit antialiased",
+                    "Hi {nick_name}："
+                }
+                p { "今日学习的分数是 {today_score}" }
+            }
         }
         State::Ready => {
             rsx! { p { "即将开始学习" } }
@@ -112,16 +150,20 @@ pub fn app(cx: Scope) -> Element {
     cx.render(rsx! {
         WxWorkRedirect {}
 
-        ui,
+        div { class: "relative w-full flex flex-col text-gray-700 bg-white shadow-md w-96 rounded-xl bg-clip-border",
+            div { class: "p-6", ui }
+        }
 
-        p {
+        p { class: "my-8 block font-sans text-base font-light leading-relaxed text-inherit antialiased",
             "中国要强盛、要复兴，就一定要大力发展科学技术，努力成为世界主要科学中心和创新高地。我们比历史上任何时期都更接近中华民族伟大复兴的目标，我们比历史上任何时期都更需要建设世界科技强国！"
         }
 
-        pre { "当前状态：{session_state:?}\n\n", "{err_msg}" }
+        div { class: "peer h-full w-full resize-none rounded-[7px] border border-blue-gray-200 border-t-transparent bg-transparent px-3 py-2.5 font-sans text-sm font-normal text-blue-gray-700 outline outline-0 transition-all placeholder-shown:border placeholder-shown:border-blue-gray-200 placeholder-shown:border-t-blue-gray-200 focus:border-2 focus:border-pink-500 focus:border-t-transparent focus:outline-0 disabled:resize-none disabled:border-0 disabled:bg-blue-gray-50",
+            "当前状态：{session_state:?}\n\n"
+            "{err_msg}"
+        }
     })
 }
-
 // #[server]
 // async fn post_server_data(data: String) -> Result<(), ServerFnError> {
 //     let axum::extract::Host(host): axum::extract::Host = extract().await?;

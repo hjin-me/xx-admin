@@ -47,7 +47,7 @@ fn main() {
                 trace!("init browsers");
                 let pool = bb8::Pool::builder()
                     .max_size(10)
-                    .min_idle(Some(1))
+                    .min_idle(None)
                     .idle_timeout(Some(Duration::from_secs(170)))
                     .build(manager)
                     .await
