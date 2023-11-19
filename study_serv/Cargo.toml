@@ -31,9 +31,10 @@ base64 = "0.21.5"
 gloo = { version = "0.10.0", features = ["futures"] }
 web-sys = { version = "0.3.65", features = ["Window", "Navigator"] }
 wasm-bindgen = "0.2.88"
+clap = { version = "4.4.8", features = ["derive", "error-context", "help", "std"], optional = true }
 
 [features]
 default = []
-ssr = ["axum", "tokio/full", "dioxus-fullstack/axum", "toml", "study/default", "study_core/default", "wx", "tracing-opentelemetry", "opentelemetry", "opentelemetry_sdk", "opentelemetry-stdout", "opentelemetry-otlp"]
+ssr = ["axum", "tokio/full", "dioxus-fullstack/axum", "toml", "study/default", "study_core/default", "wx", "tracing-opentelemetry", "opentelemetry", "opentelemetry_sdk", "opentelemetry-stdout", "opentelemetry-otlp", "clap"]
 web = ["dioxus-fullstack/web", "tokio/time", "study_core/hydrate"]
 dev = []
