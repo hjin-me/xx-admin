@@ -47,7 +47,7 @@ fn main() {
                 trace!("init browsers");
                 let pool = bb8::Pool::builder()
                     .max_size(10)
-                    .min_idle(None)
+                    .min_idle(Some(1))
                     .idle_timeout(Some(Duration::from_secs(170)))
                     .build(manager)
                     .await
@@ -64,9 +64,12 @@ fn main() {
                     .layer(Extension(ss));
 
                 // run it
+                #[cfg(feature = "dev")]
+                let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));
+                #[cfg(not(feature = "dev"))]
                 let addr = std::net::SocketAddr::from(([0, 0, 0, 0], 3000));
 
-                info!("http://0.0.0.0:3000");
+                info!("listening: http://{}", addr.to_string());
                 axum::Server::bind(&addr)
                     .serve(app.into_make_service())
                     .await

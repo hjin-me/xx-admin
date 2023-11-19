@@ -10,7 +10,7 @@ use gloo::timers::future::TimeoutFuture;
 use serde::{Deserialize, Serialize};
 use std::thread;
 use std::time::Duration;
-use study::{State, Ticket};
+use study_core::{State, Ticket};
 use tracing::info;
 
 pub fn app(cx: Scope) -> Element {
@@ -97,7 +97,7 @@ pub fn Study(cx: Scope) -> Element {
         State::Init => {
             rsx! { p { "正在启动浏览器，稍等片刻..." } }
         }
-        State::WaitingLogin(Ticket { ticket }) => match ticket_conv(&ticket) {
+        State::WaitingLogin((ticket, _expired_at)) => match ticket_conv(&ticket) {
             Ok(d) => {
                 let u = format!("dtxuexi://appclient/page/study_feeds?url={}", d.0);
                 let img = d.1;
@@ -144,6 +144,23 @@ pub fn Study(cx: Scope) -> Element {
         }
         State::Ready => {
             rsx! { p { "即将开始学习" } }
+        }
+        State::Learning((nick_name, logs)) => {
+            let log_records = logs.into_iter().map(|(key, c, t)| {
+                // to_owned![key, c, t];
+                rsx!{
+                    p { class: "block font-sans text-xl font-normal leading-relaxed text-inherit antialiased",
+                        "{key}：{c}/{t}"
+                    }
+                }
+            });
+            rsx! {
+                p { class: "block font-sans text-xl font-normal leading-relaxed text-inherit antialiased",
+                    "Hi {nick_name}："
+                }
+                p { "学习中..." }
+                log_records
+            }
         }
     };
 

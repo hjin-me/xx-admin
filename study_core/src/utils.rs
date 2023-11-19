@@ -1,25 +1,24 @@
 use crate::qrcode::decode_qr;
 use anyhow::{anyhow, Result};
+use chrono::Local;
 use headless_chrome::browser::context::Context;
 use headless_chrome::browser::default_executable;
 use headless_chrome::protocol::cdp::Page;
 use headless_chrome::{Browser, LaunchOptions, Tab};
+use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
+use serde::Deserialize;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use chrono::Local;
-use rand::seq::SliceRandom;
-use serde::Deserialize;
 use tracing::{debug, instrument, trace};
 
 #[instrument(skip_all)]
-pub fn new_browser(proxy_server: &Option<String>) -> Result<Browser> {
+pub fn new_browser() -> Result<Browser> {
     trace!("准备启动浏览器");
     let mut rng = thread_rng();
     let w = rng.gen_range(1440..2000);
     let h = rng.gen_range(720..1100);
-    let proxy_server = proxy_server.as_ref().map(|s| s.as_str());
     let launch_options = LaunchOptions::default_builder()
         .path(Some(default_executable().map_err(|e| anyhow!(e))?))
         .window_size(Some((w, h)))
@@ -27,7 +26,6 @@ pub fn new_browser(proxy_server: &Option<String>) -> Result<Browser> {
         .sandbox(false)
         .idle_browser_timeout(Duration::from_secs(300))
         // .args(vec![OsStr::new("--incognito")])
-        .proxy_server(proxy_server)
         .build()
         .map_err(|e| anyhow!("构造 Chrome 启动参数失败: {}", e))?;
     let browser = Browser::new(launch_options).map_err(|e| anyhow!("启动浏览器失败: {}", e))?;
@@ -103,6 +101,23 @@ pub fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
     )?;
     Ok(png_data)
 }
+#[instrument(skip_all)]
+pub fn get_xuexi_tab(ctx: &Context<'_>) -> Result<Arc<Tab>> {
+    let r = ctx
+        .get_tabs()?
+        .iter()
+        .find(|t| t.get_url().contains("https://www.xuexi.cn/"))
+        .cloned();
+    match r {
+        Some(tab) => Ok(tab),
+        None => {
+            let tab = ctx.new_tab()?;
+            tab.navigate_to("https://www.xuexi.cn/")?;
+            tab.wait_until_navigated()?;
+            Ok(tab)
+        }
+    }
+}
 
 #[instrument(skip_all)]
 pub async fn get_news_list() -> Result<Vec<String>> {
@@ -152,7 +167,7 @@ mod test {
     use super::*;
     #[test]
     fn test_new_browser() -> Result<()> {
-        let b = new_browser(&None)?;
+        let b = new_browser()?;
         let browser_tabs = b.get_tabs().lock().unwrap();
         // let mut tabs = vec![];
         for tab in browser_tabs.iter() {

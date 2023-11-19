@@ -1,12 +1,7 @@
 #[cfg(feature = "server")]
-use crate::utils::{get_news_list, get_video_list};
+use crate::XxManagerPool;
 #[cfg(feature = "server")]
-use crate::{XxManager, XxManagerPool};
-#[cfg(feature = "server")]
-use anyhow::{anyhow, Error, Result};
-#[cfg(feature = "server")]
-use bb8::PooledConnection;
-use serde::{Deserialize, Serialize};
+use anyhow::{anyhow, Result};
 #[cfg(feature = "server")]
 use std::ops::Deref;
 #[cfg(feature = "server")]
@@ -16,34 +11,9 @@ use std::thread;
 #[cfg(feature = "server")]
 use std::time::Duration;
 // use serde::{Deserialize, Serialize};
+use study_core::State;
 #[cfg(feature = "server")]
-use tracing::{debug, error, info, trace, warn};
-
-#[cfg(feature = "server")]
-enum StateChange {
-    BrowserClosed(Error),
-    Ready,
-    WaitingLogin(String),
-    LoggedIn(String),
-    StartLearn,
-    Complete((String, i64)),
-}
-#[cfg(feature = "hydrate")]
-#[derive(Clone, Deserialize, Serialize, Debug)]
-pub struct Ticket {
-    pub ticket: String,
-}
-#[cfg(feature = "hydrate")]
-#[derive(Clone, Deserialize, Serialize, Debug)]
-pub enum State {
-    Broken(String),
-    Prepare,
-    Init,
-    Ready,
-    WaitingLogin(Ticket),
-    Logged(String),
-    Complete((String, i64)),
-}
+use tracing::{error, info};
 
 #[cfg(feature = "server")]
 #[derive(Clone)]
@@ -60,7 +30,7 @@ impl XxState {
     }
 
     pub fn serve(&self, pool: XxManagerPool) -> Result<()> {
-        let (tx, rx) = std::sync::mpsc::channel::<StateChange>();
+        let (tx, rx) = std::sync::mpsc::channel::<State>();
         thread::spawn(move || {
             let run = match tokio::runtime::Runtime::new() {
                 Ok(r) => r,
@@ -68,7 +38,7 @@ impl XxState {
             };
             match run.block_on(async {
                 info!("get pool");
-                let mut conn = match pool.get().await {
+                let conn = match pool.get().await {
                     Ok(conn) => conn,
                     Err(e) => {
                         match e {
@@ -82,28 +52,21 @@ impl XxState {
                         return Err(anyhow!("获取连接池失败了"));
                     }
                 };
-                tx.send(StateChange::Ready)?;
-                let ticket = conn.get_ticket();
-                tx.send(StateChange::WaitingLogin(ticket))?;
-                trace!("got");
-                waiting_login(&mut conn, Duration::from_secs(120)).await?;
-                let nick_name = conn.get_user_info()?;
-                tx.send(StateChange::LoggedIn(nick_name.clone()))?;
-
-                let news_list = get_news_list().await?;
-                let video_list = get_video_list().await?;
-
-                tx.send(StateChange::StartLearn)?;
-                conn.try_study(&news_list, &video_list)?;
-                let n = conn.get_today_score()?;
-                Ok((nick_name, n))
-            }) {
-                Ok(r) => {
-                    tx.send(StateChange::Complete(r))?;
+                loop {
+                    let state = conn.get_state();
+                    tx.send(state.clone())?;
+                    match state.clone() {
+                        State::Complete(_) => return Ok(()),
+                        State::Broken(e) => return Err(anyhow!(e)),
+                        _ => {}
+                    };
+                    tokio::time::sleep(Duration::from_secs(1)).await;
                 }
+            }) {
+                Ok(_) => {}
                 Err(e) => {
                     error!("XxState 后台任务失败: {}", e);
-                    tx.send(StateChange::BrowserClosed(e))?
+                    tx.send(State::Broken(e.to_string()))?
                 }
             };
             Ok(())
@@ -111,45 +74,11 @@ impl XxState {
         let state = self.state.clone();
         thread::spawn(move || {
             for x in rx.iter() {
-                match x {
-                    StateChange::BrowserClosed(e) => {
-                        error!("浏览器崩溃了: {}", e);
-                        let mut s = state.write().unwrap();
-                        *s = State::Broken(e.to_string());
-                    }
-                    StateChange::Ready => {
-                        trace!("ready");
-                        let mut s = state.write().unwrap();
-                        *s = State::Ready;
-                    }
-                    StateChange::WaitingLogin(ticket) => {
-                        let mut s =
-                            "https://techxuexi.js.org/jump/techxuexi-20211023.html?".to_string();
-                        s.extend(form_urlencoded::byte_serialize(ticket.as_bytes()));
-                        info!("等待登陆: {}", s);
-                        let mut s = state.write().unwrap();
-                        *s = State::WaitingLogin(Ticket { ticket })
-                    }
-                    StateChange::LoggedIn(nick_name) => {
-                        info!("登陆成功: {}", nick_name);
-                        let mut s = state.write().unwrap();
-                        *s = State::Logged(nick_name);
-                    }
-                    StateChange::StartLearn => {
-                        info!("开始学习");
-                    }
-                    StateChange::Complete(r) => {
-                        info!("学习完成: {} {}", r.0, r.1);
-                        let mut s = state.write().unwrap();
-                        *s = State::Complete(r);
-                    }
-                }
+                let mut s = state.write().unwrap();
+                *s = x.clone();
             }
         });
-        {
-            let mut s = self.state.write().unwrap();
-            *s = State::Init;
-        }
+
         Ok(())
     }
 
@@ -161,7 +90,12 @@ impl XxState {
     pub fn get_ticket(&self) -> Result<String> {
         let s = self.get_state();
         match s {
-            State::WaitingLogin(t) => Ok(t.ticket.clone()),
+            State::WaitingLogin((t, ts)) => {
+                if ts < chrono::Local::now().timestamp() {
+                    return Err(anyhow!("ticket 已经过期"));
+                }
+                Ok(t.clone())
+            }
             _ => Err(anyhow!("还没有获取到 ticket")),
         }
     }
@@ -185,42 +119,10 @@ impl XxState {
     }
 }
 
-#[cfg(feature = "server")]
-async fn waiting_login(
-    conn: &mut PooledConnection<'_, XxManager>,
-    timeout: Duration,
-) -> Result<()> {
-    let check = async {
-        loop {
-            match conn.check_login() {
-                Ok(b) => {
-                    if b {
-                        break;
-                    } else {
-                        debug!("还没登陆");
-                        tokio::time::sleep(Duration::from_secs(5)).await;
-                    }
-                }
-                Err(e) => {
-                    error!("判断登陆状态失败: {}", e);
-                }
-            }
-        }
-    };
-    tokio::select! {
-        _ = check => {
-            return Ok(())
-        },
-        _ = tokio::time::sleep(timeout) => {
-            warn!("等待登陆超时");
-            return Err(anyhow!("等待登陆超时"))
-        },
-    }
-}
-
 #[cfg(all(feature = "server", test))]
 mod test {
     use super::*;
+    use crate::XxManager;
     #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
     async fn test_state() -> Result<()> {
         tracing_subscriber::fmt::init();

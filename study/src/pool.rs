@@ -1,9 +1,9 @@
 ///#![allow(clippy::needless_doctest_main)]
 /// #![deny(missing_docs, missing_debug_implementations)]
-use crate::xx::Xx;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 pub use bb8;
+use study_core::Xx;
 //
 
 pub type XxManagerPool = bb8::Pool<XxManager>;
@@ -44,7 +44,7 @@ impl bb8::ManageConnection for XxManager {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::utils::{get_news_list, get_video_list};
+    use study_core::utils::{get_news_list, get_video_list};
     use std::thread;
     use std::thread::spawn;
     use std::time::Duration;

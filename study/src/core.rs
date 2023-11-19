@@ -1,29 +1,24 @@
-use crate::eval::{get_today_score, get_today_tasks, get_user_info, scroll_to};
 pub use crate::pool::*;
-pub use crate::qrcode::*;
 pub use crate::session_state::*;
 pub use crate::state::*;
-use crate::utils::{get_news_list, get_one_tab, get_video_list, new_browser, reset_tabs, wait_qr};
-pub use crate::xx::Xx;
 use anyhow::{anyhow, Result};
 use chrono::Local;
 use headless_chrome::browser::context::Context;
-use rand::{thread_rng, Rng};
 use std::ops::Add;
 use std::thread;
 use std::time::Duration;
+use study_core::eval::{get_today_score, get_today_tasks, get_user_info};
+use study_core::utils::{
+    get_news_list, get_one_tab, get_video_list, new_browser, reset_tabs, wait_qr,
+};
+use study_core::{browse_news, browse_video, decode_qr};
 use tokio::time;
 use tracing::{debug, error, info, instrument, trace, warn};
 use wx::{drop_msg_task, DropMsg, MsgApi, MP};
 
 #[instrument(skip_all, fields(user = %login_user))]
-pub async fn browse_xx(
-    mp: &MP,
-    login_user: &str,
-    proxy_server: &Option<String>,
-    app_caller: &str,
-) -> Result<()> {
-    let mut browser = new_browser(proxy_server)?;
+pub async fn browse_xx(mp: &MP, login_user: &str, app_caller: &str) -> Result<()> {
+    let mut browser = new_browser()?;
     let mut ctx = browser.new_context()?;
 
     info!(user = login_user, "等待用户登陆");
@@ -37,7 +32,7 @@ pub async fn browse_xx(
             if ctx.get_tabs().unwrap().len() > 3 {
                 drop(browser);
                 trace!("哎，关不了 tab，只能关浏览器重启了");
-                browser = new_browser(proxy_server)?;
+                browser = new_browser()?;
                 ctx = browser.new_context()?;
             }
         }
@@ -245,51 +240,6 @@ async fn send_login_msg<T: MsgApi>(
     Ok(vec![m1, m2])
 }
 
-#[instrument(skip(browser))]
-fn browse_news(browser: &Context<'_>, url: &str) -> Result<()> {
-    let tab = get_one_tab(browser)?;
-    tab.activate()?;
-    tab.navigate_to(url)?;
-    thread::sleep(Duration::from_secs(10));
-    scroll_to(&tab, 394)?;
-    let s = {
-        let mut rng = thread_rng();
-        rng.gen_range(80..110)
-    };
-    debug!("阅读文章 {} 秒", s);
-    thread::sleep(Duration::from_secs(s / 2));
-    scroll_to(&tab, 1000)?;
-    thread::sleep(Duration::from_secs(s / 2));
-    scroll_to(&tab, 3000)?;
-    thread::sleep(Duration::from_secs(10));
-    scroll_to(&tab, 0)?;
-    // headless 模式下，close 没有反应？
-    // tab.close(false)?;
-    Ok(())
-}
-#[instrument(skip(browser))]
-fn browse_video(browser: &Context<'_>, url: &str) -> Result<()> {
-    let tab = get_one_tab(browser)?;
-    tab.activate()?;
-    tab.navigate_to(url)?;
-    tab.wait_until_navigated()?;
-    thread::sleep(Duration::from_secs(1));
-    scroll_to(&tab, 394)?;
-    let play_js = include_str!("play.js");
-    tab.evaluate(play_js, false)?;
-    let s = {
-        let mut rng = thread_rng();
-        rng.gen_range(130..260)
-    };
-    debug!("观看视频 {} 秒", s);
-    thread::sleep(Duration::from_secs(s / 2));
-    scroll_to(&tab, 500)?;
-    thread::sleep(Duration::from_secs(s / 2));
-    scroll_to(&tab, 300)?;
-    // tab.close(false)?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -309,13 +259,13 @@ mod test {
         tracing_subscriber::fmt::init();
         let conf: Conf = serde_json::from_str(include_str!("../../wx/config.json"))?;
         let mp = MP::new(&conf.corp_id, &conf.corp_secret, conf.agent_id);
-        dbg!(browse_xx(&mp, &conf.to_user, &None, &conf.app_caller).await)?;
+        dbg!(browse_xx(&mp, &conf.to_user, &conf.app_caller).await)?;
         Ok(())
     }
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_browser_close() -> Result<()> {
         tracing_subscriber::fmt::init();
-        let b = new_browser(&None)?;
+        let b = new_browser()?;
         let c = b.new_context()?;
         info!("open new tab");
         let tab = c.new_tab()?;
@@ -340,7 +290,7 @@ mod test {
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_headless_close() -> Result<()> {
         tracing_subscriber::fmt::init();
-        let browser = new_browser(&None)?;
+        let browser = new_browser()?;
 
         let tab = browser.new_tab()?;
         {

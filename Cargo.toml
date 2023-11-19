@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = ["study", "wx", "study_serv"]
+members = ["study", "wx", "study_serv", "study_core"]
 
 [dependencies]
 anyhow = { workspace = true }

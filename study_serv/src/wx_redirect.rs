@@ -27,7 +27,7 @@ fn is_wx() -> bool {
     let ua = navigator.user_agent().unwrap_or("".to_string());
     ua.contains("wxwork/")
 }
-#[cfg(feature = "ssr")]
+#[cfg(not(feature = "web"))]
 fn is_wx() -> bool {
     true
 }

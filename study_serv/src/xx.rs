@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use std::thread;
 use std::time::Duration;
 use study::bb8::Pool;
-use study::{bb8, State, StateSession, XxManager};
+use study::{bb8, StateSession, XxManager};
+use study_core::State;
 use tokio::time;
 use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
@@ -72,10 +73,7 @@ pub async fn start_new_task() -> Result<u64> {
     use axum::Extension;
     use study::StateSession;
     let Extension(ss): Extension<StateSession> = extract().await?;
-    info!("{:?}", tokio::runtime::Handle::current().runtime_flavor());
-
     let s_id = ss.new_state()?;
-
     Ok(s_id)
 }
 
