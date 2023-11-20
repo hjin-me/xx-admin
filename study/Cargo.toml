@@ -27,7 +27,8 @@ wx = { path = "../wx", optional = true }
 study_core = { path = "../study_core", optional = true }
 
 [dev-dependencies]
-tracing-subscriber = "0.3.17"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+sysinfo = "0.29.10"
 
 [features]
 default = ["server"]

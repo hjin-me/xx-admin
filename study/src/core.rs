@@ -163,7 +163,7 @@ async fn try_login(
 ) -> Result<String> {
     reset_tabs(ctx)?;
     let tab = get_one_tab(ctx)?;
-    tab.activate()?;
+    // tab.activate()?;
     tab.navigate_to("https://www.xuexi.cn/")
         .map_err(|e| anyhow!("打开学习页面失败: {}", e))?;
 

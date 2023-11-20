@@ -45,6 +45,7 @@ mod test {
     use anyhow::anyhow;
     use std::time::Duration;
     use tracing::info;
+    use study_core::State;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
     async fn test_state() -> Result<()> {
@@ -67,7 +68,7 @@ mod test {
                 let is = s.get_state();
 
                 info!("读取状态数据 {:?}", is);
-                if let crate::state::State::Complete(_) = is {
+                if let State::Complete(_) = is {
                     break;
                 }
             }

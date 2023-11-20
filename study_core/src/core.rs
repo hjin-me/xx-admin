@@ -26,7 +26,7 @@ pub async fn new_xx_task_bg(tx: Sender<StateChange>) -> Result<()> {
         if let Ok(()) = waiting_login(&ctx, Duration::from_secs(130)).await {
             break;
         } else {
-            tx.send(StateChange::Ready)?;
+            tx.send(StateChange::Init)?;
         }
     }
 

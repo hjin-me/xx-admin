@@ -44,19 +44,24 @@ pub fn Study(cx: Scope) -> Element {
         to_owned![err_msg, session_state];
         async move {
             while let Some(id) = rx.next().await {
+                let mut counter = 1;
                 loop {
+                    let dots = ".".repeat(counter);
+                    counter = (counter % 10) + 1;
                     let state = get_state(id).await;
                     match state {
                         Ok(s) => {
                             info!("state is {:?}", s);
                             session_state.set(s.clone());
-                            err_msg.set("自动查询更新状态中...".to_string());
                             if let State::Complete(_) = s {
+                                err_msg.set("完成".to_string());
                                 break;
                             }
+                            err_msg.set(format!("自动查询更新状态中{}", dots));
                         }
                         Err(e) => {
                             err_msg.set(e.to_string());
+                            break;
                         }
                     }
                     TimeoutFuture::new(2000).await;
