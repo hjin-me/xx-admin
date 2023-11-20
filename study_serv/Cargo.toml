@@ -9,7 +9,6 @@ axum = { version = "0.6.20", optional = true }
 dioxus = "0.4.0"
 dioxus-fullstack = "0.4.1"
 serde.workspace = true
-tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 tracing-wasm = "0.2.1"
 anyhow.workspace = true
 tracing.workspace = true
@@ -19,11 +18,6 @@ study_core = { path = "../study_core", optional = true, default-features = false
 toml = { version = "0.8.8", optional = true }
 tokio = { version = "1.34.0", default-features = false, optional = true }
 form_urlencoded = "1.2.0"
-tracing-opentelemetry = { version = "0.22.0", optional = true }
-opentelemetry = { version = "0.21.0", features = ["trace"], optional = true }
-opentelemetry_sdk = { version = "0.21.0", features = ["trace", "rt-tokio"], optional = true }
-opentelemetry-stdout = { version = "0.2.0", features = ["trace"], optional = true }
-opentelemetry-otlp = { version = "0.14.0", features = ["default"], optional = true }
 wasm-bindgen-futures = "0.4.38"
 futures-util = "0.3.29"
 qrcode-generator = "4.1.9"
@@ -34,9 +28,10 @@ wasm-bindgen = "0.2.88"
 clap = { version = "4.4.8", features = ["derive", "error-context", "help", "std"], optional = true }
 tower = { version = "0.4.13", optional = true }
 tower-http = { version = "0.4.0", features = ["fs", "trace", "compression-gzip", "compression-deflate", "compression-zstd", "async-compression", "cors"], optional = true }
+infra = { path = "../infra", optional = true }
 
 [features]
 default = []
-ssr = ["axum", "tokio/full", "dioxus-fullstack/axum", "dioxus-fullstack/router", "toml", "study/default", "study_core/default", "wx", "tracing-opentelemetry", "opentelemetry", "opentelemetry_sdk", "opentelemetry-stdout", "opentelemetry-otlp", "clap", "tower", "tower-http"]
+ssr = ["axum", "tokio/full", "dioxus-fullstack/axum", "dioxus-fullstack/router", "toml", "study/default", "study_core/default", "wx", "clap", "tower", "tower-http", "infra"]
 web = ["dioxus-fullstack/web", "dioxus-fullstack/router", "tokio/time", "study_core/hydrate"]
 dev = []

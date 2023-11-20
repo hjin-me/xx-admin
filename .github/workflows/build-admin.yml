@@ -16,4 +16,6 @@ jobs:
           name: hjin/xx-admin
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
+          dockerfile: admin_serv/Dockerfile
           tag_names: true
+          snapshot: true

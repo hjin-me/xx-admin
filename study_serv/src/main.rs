@@ -7,8 +7,6 @@
 
 #![allow(non_snake_case, unused)]
 
-#[cfg(feature = "ssr")]
-mod backend;
 mod home;
 mod qr;
 mod state;
@@ -52,7 +50,7 @@ async fn main() {
 
     let args = Args::parse();
 
-    let _g = backend::otel::init_tracing_subscriber("study");
+    let _g = infra::otel::init_tracing_subscriber("study");
     trace!("Starting up, {:?}", args);
     let manager = XxManager::new();
     trace!("init browsers");

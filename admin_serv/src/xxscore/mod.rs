@@ -172,6 +172,7 @@ mod test {
             &c.xx_org_gray_id,
             &mp,
             c.proxy_server.clone(),
+            "",
         );
 
         daily_score(
