@@ -2,7 +2,7 @@ FROM rust:latest as builder
 RUN apt-get update && apt-get install -y librust-clang-sys-dev
 WORKDIR /build
 COPY . .
-RUN cargo build --release
+RUN cd admin_serv && cargo build --release
 
 FROM hjin/chrome:20231106065551772b5a
 COPY --from=builder /build/target/release/admin_serv /usr/local/bin/admin_serv
