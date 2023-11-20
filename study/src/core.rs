@@ -11,7 +11,7 @@ use study_core::eval::{get_today_score, get_today_tasks, get_user_info};
 use study_core::utils::{
     get_news_list, get_one_tab, get_video_list, new_browser, reset_tabs, wait_qr,
 };
-use study_core::{browse_news, browse_video, decode_qr};
+use study_core::{browse_news, browse_video, decode_qr, UserInfo};
 use tokio::time;
 use tracing::{debug, error, info, instrument, trace, warn};
 use wx::{drop_msg_task, DropMsg, MsgApi, MP};
@@ -40,7 +40,7 @@ pub async fn browse_xx(mp: &MP, login_user: &str, app_caller: &str) -> Result<()
         match try_login(&ctx, login_user, mp, app_caller).await {
             Ok(n) => {
                 logined = true;
-                nick_name = n;
+                nick_name = n.nick;
             }
             Err(e) => {
                 warn!("登陆失败: {:?}", e);
@@ -160,7 +160,7 @@ async fn try_login(
     login_user: &str,
     mp: &MP,
     app_caller: &str,
-) -> Result<String> {
+) -> Result<UserInfo> {
     reset_tabs(ctx)?;
     let tab = get_one_tab(ctx)?;
     // tab.activate()?;

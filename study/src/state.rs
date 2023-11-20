@@ -10,6 +10,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 #[cfg(feature = "server")]
 use std::time::Duration;
+use study_core::utils::UserValidator;
 use study_core::State;
 use tokio::time::sleep;
 #[cfg(feature = "server")]
@@ -31,7 +32,10 @@ impl XxState {
         }
     }
 
-    pub fn serve(&self, pool: XxManagerPool) -> Result<()> {
+    pub fn serve<T: UserValidator + Send + Sync + Clone + 'static>(
+        &self,
+        pool: XxManagerPool<T>,
+    ) -> Result<()> {
         let (tx, rx) = std::sync::mpsc::channel::<State>();
         let cancel_token = CancellationToken::new();
         let cloned_cancel_token = cancel_token.clone();

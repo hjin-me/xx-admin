@@ -4,20 +4,21 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, RwLock};
+use study_core::utils::UserValidator;
 
 #[derive(Clone)]
-pub struct StateSession {
+pub struct StateSession<T: UserValidator + Clone + Sync + Send + 'static> {
     data: Arc<RwLock<HashMap<u64, XxState>>>,
     counter: Arc<AtomicU64>,
-    pool: XxManagerPool,
+    pool: XxManagerPool<T>,
 }
 
-impl StateSession {
-    pub fn new(pool: &XxManagerPool) -> Self {
+impl<T: UserValidator + Clone + Send + Sync + 'static> StateSession<T> {
+    pub fn new(pool: XxManagerPool<T>) -> Self {
         Self {
             data: Arc::new(RwLock::new(HashMap::new())),
             counter: Arc::new(AtomicU64::new(0)),
-            pool: pool.clone(),
+            pool,
         }
     }
 
@@ -44,8 +45,8 @@ mod test {
     use crate::XxManager;
     use anyhow::anyhow;
     use std::time::Duration;
-    use tracing::info;
     use study_core::State;
+    use tracing::info;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
     async fn test_state() -> Result<()> {

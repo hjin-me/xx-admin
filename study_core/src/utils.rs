@@ -1,5 +1,6 @@
 use crate::qrcode::decode_qr;
 use anyhow::{anyhow, Result};
+use async_trait::async_trait;
 use chrono::Local;
 use headless_chrome::browser::context::Context;
 use headless_chrome::browser::default_executable;
@@ -195,4 +196,9 @@ mod test {
         // thread::sleep(Duration::from_secs(60));
         // Ok(())
     }
+}
+
+#[async_trait]
+pub trait UserValidator {
+    async fn validate(&self, uid: i64) -> Result<bool>;
 }

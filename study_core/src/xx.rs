@@ -1,3 +1,4 @@
+use crate::utils::UserValidator;
 use crate::{new_xx_task_bg, State, StateChange};
 use anyhow::{anyhow, Result};
 use std::ops::{Add, Deref};
@@ -15,7 +16,7 @@ pub struct Xx {
 }
 
 impl Xx {
-    pub fn new() -> Result<Self> {
+    pub fn new<T: UserValidator + Send + Sync + Clone + 'static>(validator: T) -> Result<Self> {
         let cancel_token = CancellationToken::new();
         let (tx, rx) = std::sync::mpsc::channel::<StateChange>();
 
@@ -31,7 +32,7 @@ impl Xx {
                         info!("study 后台任务被取消");
                         return Err(anyhow!("进程退出，任务正常取消"))
                     }
-                    r = new_xx_task_bg(tx.clone()) => {
+                    r = new_xx_task_bg(tx.clone(), validator) => {
                         trace!("后台任务好像执行完了");
                         r
                     }
@@ -81,10 +82,10 @@ impl Xx {
                                 .timestamp(),
                         ))
                     }
-                    StateChange::LoggedIn(nick_name) => {
-                        info!("登陆成功: {}", nick_name);
+                    StateChange::LoggedIn(user_info) => {
+                        info!("登陆成功: {}", user_info.nick);
                         let mut s = state.write().unwrap();
-                        *s = State::Logged(nick_name);
+                        *s = State::Logged(user_info.nick);
                     }
                     StateChange::StartLearn => {
                         info!("开始学习");

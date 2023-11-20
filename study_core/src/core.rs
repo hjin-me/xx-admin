@@ -3,6 +3,7 @@ pub use crate::qrcode::*;
 pub use crate::state::*;
 use crate::utils::{
     get_login_ticket, get_news_list, get_one_tab, get_video_list, get_xuexi_tab, new_browser,
+    UserValidator,
 };
 pub use crate::xx::Xx;
 use anyhow::{anyhow, Result};
@@ -14,7 +15,7 @@ use std::time::Duration;
 use tracing::{debug, error, info, instrument, trace, warn};
 
 #[instrument(skip_all)]
-pub async fn new_xx_task_bg(tx: Sender<StateChange>) -> Result<()> {
+pub async fn new_xx_task_bg<T: UserValidator>(tx: Sender<StateChange>, validator: T) -> Result<()> {
     let browser = new_browser()?;
     let ctx = browser.new_context()?;
     tx.send(StateChange::Init)?;
@@ -30,32 +31,52 @@ pub async fn new_xx_task_bg(tx: Sender<StateChange>) -> Result<()> {
         }
     }
 
-    let nick_name = {
+    let user_info = {
         let tab = get_xuexi_tab(&ctx)?;
         get_user_info(&tab)?
     };
-    tx.send(StateChange::LoggedIn(nick_name.clone()))?;
+    // 白名单，黑名单检查
+    if !validator.validate(user_info.uid).await? {
+        tx.send(StateChange::BrowserClosed(anyhow!("登陆异常")))?;
+        return Ok(());
+    }
+    tx.send(StateChange::LoggedIn(user_info.clone()))?;
 
     let news_list = get_news_list().await?;
     let video_list = get_video_list().await?;
 
     tx.send(StateChange::StartLearn)?;
-    try_study(&ctx, tx.clone(), &nick_name, &news_list, &video_list)?;
+    let n = study_and_summarize(&ctx, tx.clone(), &user_info, &news_list, &video_list)?;
+    tx.send(StateChange::Complete((user_info.nick, n)))?;
+    Ok(())
+}
+
+#[instrument(skip_all, fields(nick_name = user_info.nick, uid = user_info.uid))]
+fn study_and_summarize(
+    ctx: &Context<'_>,
+    tx: Sender<StateChange>,
+    user_info: &UserInfo,
+    news_list: &[String],
+    video_list: &[String],
+) -> Result<i64> {
+    try_study(ctx, tx.clone(), &user_info.nick, &news_list, &video_list)?;
 
     let n = {
         let tab = get_xuexi_tab(&ctx)?;
         get_today_score(&tab)?
     };
     debug!(
-        nick_name = &nick_name,
-        "今天学习总分为[{}] {}", nick_name, n
+        nick_name = &user_info.nick,
+        uid = &user_info.uid,
+        "今天学习总分为[{}] {}",
+        user_info.nick,
+        n
     );
-    tx.send(StateChange::Complete((nick_name, n)))?;
-    Ok(())
+    Ok(n)
 }
 
 #[instrument(skip_all, fields(nick_name = nick_name))]
-pub fn try_study(
+fn try_study(
     browser: &Context<'_>,
     tx: Sender<StateChange>,
     nick_name: &str,
@@ -99,7 +120,6 @@ pub fn try_study(
                         browse_news(browser, u)?;
                     } else {
                         warn!("居然没有文章了，不知道怎么处理");
-                        // thread::sleep(Duration::from_secs(300));
                         return Ok(());
                     }
                 }
@@ -117,7 +137,6 @@ pub fn try_study(
                         browse_video(browser, u)?;
                     } else {
                         warn!("居然没有视频了，不知道怎么处理");
-                        // thread::sleep(Duration::from_secs(300));
                         return Ok(());
                     }
                 }

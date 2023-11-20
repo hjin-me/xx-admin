@@ -5,13 +5,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tracing::{debug, instrument, trace, warn};
-
-#[derive(Deserialize, Debug)]
-pub struct UserInfo {
-    // uid: i64,
-    pub nick: String,
-    // avatarMediaUrl: String,
-}
+use crate::UserInfo;
 
 #[derive(Deserialize, Debug)]
 struct UserInfoResp {
@@ -19,7 +13,7 @@ struct UserInfoResp {
 }
 
 #[instrument(skip(tab))]
-pub fn get_user_info(tab: &Arc<Tab>) -> Result<String> {
+pub fn get_user_info(tab: &Arc<Tab>) -> Result<UserInfo> {
     trace!("获取当前用户名");
     let js = include_str!("info.js");
     let remote_obj = tab.evaluate(js, true)?;
@@ -39,8 +33,8 @@ pub fn get_user_info(tab: &Arc<Tab>) -> Result<String> {
             Err(anyhow!("执行脚本获取数据失败"))
         }
     }?;
-    debug!("当前用户名是 {:?}", result.data.nick);
-    Ok(result.data.nick)
+    debug!("当前用户名是 {} [{}]", result.data.nick, result.data.uid);
+    Ok(result.data)
 }
 
 #[instrument(skip(tab))]

@@ -7,6 +7,8 @@
 
 #![allow(non_snake_case, unused)]
 
+#[cfg(feature = "ssr")]
+mod backend;
 mod home;
 mod qr;
 mod state;
@@ -33,6 +35,7 @@ fn main() {
 #[cfg(any(not(feature = "web"), feature = "ssr"))]
 #[tokio::main]
 async fn main() {
+    use crate::backend::user_validator::WBList;
     use axum::routing::*;
     use axum::Extension;
     use clap::Parser;
@@ -52,32 +55,28 @@ async fn main() {
 
     let _g = infra::otel::init_tracing_subscriber("study");
     trace!("Starting up, {:?}", args);
-    let manager = XxManager::new();
+    let manager = XxManager::new(WBList::default());
     trace!("init browsers");
     let pool = bb8::Pool::builder()
         .max_size(args.max_size)
         .min_idle(Some(args.min_idle))
-        .idle_timeout(Some(Duration::from_secs(170)))
         .build(manager)
         .await
         .unwrap();
 
     trace!("init sessions");
-    let ss = StateSession::new(&pool);
+    let ss = StateSession::new(pool);
 
     // build our application with some routes
     let app = Router::new()
         // Server side render the application, serve static assets, and register server functions
         .serve_dioxus_application("/xx/api", ServeConfigBuilder::new(app, ()))
-        .layer(Extension(pool))
         .layer(Extension(ss));
 
     // run it
     #[cfg(not(feature = "dev"))]
     let app = app.layer(
-        tower::ServiceBuilder::new()
-            .layer(tower_http::trace::TraceLayer::new_for_http())
-            .layer(tower_http::compression::CompressionLayer::new()),
+        tower::ServiceBuilder::new().layer(tower_http::compression::CompressionLayer::new()),
     );
     #[cfg(feature = "dev")]
     let addr = std::net::SocketAddr::from(([127, 0, 0, 1], 3000));

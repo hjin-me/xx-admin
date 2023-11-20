@@ -19,9 +19,10 @@ pub struct StudyConfig {
 }
 
 pub async fn try_get_ticket(s_id: u64) -> Result<String> {
+    use crate::backend::user_validator::WBList;
     use axum::Extension;
     use study::StateSession;
-    let Extension(ss): Extension<StateSession> = extract().await?;
+    let Extension(ss): Extension<StateSession<WBList>> = extract().await?;
 
     let state = ss.get(s_id).ok_or(anyhow!("没有找到状态数据"))?;
 
@@ -39,9 +40,10 @@ pub async fn try_get_ticket(s_id: u64) -> Result<String> {
     Err(anyhow!("获取 ticket 失败"))
 }
 pub async fn try_get_current_user(s_id: u64) -> Result<String> {
+    use crate::backend::user_validator::WBList;
     use axum::Extension;
     use study::StateSession;
-    let Extension(ss): Extension<StateSession> = extract().await?;
+    let Extension(ss): Extension<StateSession<WBList>> = extract().await?;
 
     let state = ss.get(s_id).ok_or(anyhow!("没有找到状态数据"))?;
 
@@ -60,9 +62,10 @@ pub async fn try_get_current_user(s_id: u64) -> Result<String> {
 }
 
 pub async fn try_get_state(s_id: u64) -> Result<State> {
+    use crate::backend::user_validator::WBList;
     use axum::Extension;
     use study::StateSession;
-    let Extension(ss): Extension<StateSession> = extract().await?;
+    let Extension(ss): Extension<StateSession<WBList>> = extract().await?;
 
     let state = ss.get(s_id).ok_or(anyhow!("没有找到状态数据"))?;
 
@@ -70,9 +73,10 @@ pub async fn try_get_state(s_id: u64) -> Result<State> {
 }
 
 pub async fn start_new_task() -> Result<u64> {
+    use crate::backend::user_validator::WBList;
     use axum::Extension;
     use study::StateSession;
-    let Extension(ss): Extension<StateSession> = extract().await?;
+    let Extension(ss): Extension<StateSession<WBList>> = extract().await?;
     let s_id = ss.new_state()?;
     Ok(s_id)
 }

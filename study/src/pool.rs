@@ -3,25 +3,29 @@
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 pub use bb8;
+use study_core::utils::UserValidator;
 use study_core::Xx;
 use tracing::debug;
 //
 
-pub type XxManagerPool = bb8::Pool<XxManager>;
+pub type XxManagerPool<T> = bb8::Pool<XxManager<T>>;
 #[derive(Clone, Debug)]
-pub struct XxManager {}
+pub struct XxManager<T: UserValidator + Send + Sync + Clone> {
+    uv: T,
+}
 
-impl XxManager {
-    pub fn new() -> Self {
-        Self {}
+impl<T: UserValidator + Send + Sync + Clone + 'static> XxManager<T> {
+    pub fn new(v: T) -> Self {
+        Self { uv: v.clone() }
     }
     pub async fn get_one(&self) -> Result<Xx> {
-        tokio::spawn(async move { Xx::new() }).await?
+        let uv = self.uv.clone();
+        tokio::spawn(async move { Xx::new(uv) }).await?
     }
 }
 
 #[async_trait]
-impl bb8::ManageConnection for XxManager {
+impl<T: UserValidator + Send + Sync + Clone + 'static> bb8::ManageConnection for XxManager<T> {
     type Connection = Xx;
     type Error = anyhow::Error;
 

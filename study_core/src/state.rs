@@ -1,6 +1,13 @@
 #[cfg(feature = "server")]
 use anyhow::Error;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "hydrate")]
+#[derive(Deserialize, Debug, Clone)]
+pub struct UserInfo {
+    pub uid: i64,
+    pub nick: String,
+    // avatarMediaUrl: String,
+}
 
 #[cfg(feature = "server")]
 pub enum StateChange {
@@ -8,7 +15,7 @@ pub enum StateChange {
     Init,
     Ready,
     WaitingLogin(String),
-    LoggedIn(String),
+    LoggedIn(UserInfo),
     StartLearn,
     LearnLog((String, Vec<(String, i64, i64)>)),
     Complete((String, i64)),
