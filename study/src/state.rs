@@ -10,8 +10,10 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 #[cfg(feature = "server")]
 use std::time::Duration;
-// use serde::{Deserialize, Serialize};
 use study_core::State;
+use tokio::time::sleep;
+#[cfg(feature = "server")]
+use tokio_util::sync::CancellationToken;
 #[cfg(feature = "server")]
 use tracing::{error, info};
 
@@ -31,11 +33,17 @@ impl XxState {
 
     pub fn serve(&self, pool: XxManagerPool) -> Result<()> {
         let (tx, rx) = std::sync::mpsc::channel::<State>();
+        let cancel_token = CancellationToken::new();
+        let cloned_cancel_token = cancel_token.clone();
         thread::spawn(move || {
             let run = match tokio::runtime::Runtime::new() {
                 Ok(r) => r,
                 Err(e) => return Err(anyhow!("XxState 启动后台任务失败: {}", e)),
             };
+            run.spawn(async move {
+                sleep(Duration::from_secs(5 * 60)).await;
+                cloned_cancel_token.cancel();
+            });
             match run.block_on(async {
                 info!("get pool");
                 let conn = match pool.get().await {
@@ -58,6 +66,12 @@ impl XxState {
                     match state.clone() {
                         State::Complete(_) => return Ok(()),
                         State::Broken(e) => return Err(anyhow!(e)),
+                        State::WaitingLogin(_) => {
+                            if cancel_token.is_cancelled() {
+                                tx.send(State::Broken("等了5分钟你都没登陆".to_string()))?;
+                                return Err(anyhow!("5分钟都没有主动登陆学习，任务取消了"));
+                            }
+                        }
                         _ => {}
                     };
                     tokio::time::sleep(Duration::from_secs(1)).await;

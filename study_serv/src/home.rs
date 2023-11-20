@@ -129,7 +129,7 @@ pub fn Study(cx: Scope) -> Element {
                 p { class: "block font-sans text-xl font-normal leading-relaxed text-inherit antialiased",
                     "Hi {nick_name}："
                 }
-                p { "你已经扫码登陆，学习即将开始，可以关闭浏览器了。" }
+                p { "你已经扫码登陆，学习即将开始，页面会显示学习进度。" }
             }
         }
         State::Broken(e) => {
