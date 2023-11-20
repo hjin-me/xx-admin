@@ -10,6 +10,8 @@ async-trait = "0.1.74"
 chrono = "0.4.31"
 serde = "1.0.190"
 tracing = "0.1.40"
+reqwest = "0.11.22"
+
 
 
 [profile.release]
@@ -18,3 +20,11 @@ lto = true          # Enable Link Time Optimization
 codegen-units = 1   # Reduce number of codegen units to increase optimizations.
 panic = "abort"     # Abort on panic
 strip = true        # Automatically strip symbols from the binary.
+
+# 下面的代码是暂时解决 dx build 出错的
+[package]
+name = "xx"
+version.workspace = true
+edition = "2021"
+[dependencies]
+reqwest = { workspace = true }
