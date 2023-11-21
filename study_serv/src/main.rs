@@ -49,13 +49,16 @@ async fn main() {
         max_size: u32,
         #[arg(long, default_value = "1")]
         min_idle: u32,
+        #[arg(short, long, default_value = "./config.toml")]
+        config: String,
     }
 
     let args = Args::parse();
 
     let _g = infra::otel::init_tracing_subscriber("study");
     trace!("Starting up, {:?}", args);
-    let manager = XxManager::new(WBList::default());
+    // let config = backend::conf::BaseConf::from_path(&args.config).expect("读取配置文件失败");
+    let manager = XxManager::new(WBList::new(&args.config));
     trace!("init browsers");
     let pool = bb8::Pool::builder()
         .max_size(args.max_size)
