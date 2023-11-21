@@ -10,11 +10,14 @@ pub trait MsgApi {
     async fn send_text_msg(&self, to_user: &str, msg: &str) -> Result<String>;
     async fn send_markdown_msg(&self, to_user: &str, msg: &str) -> Result<String>;
     async fn send_bot_msg(&self, msg: &str, api: &str) -> Result<()>;
+    async fn send_bot_text(&self, msg: &str, api: &str) -> Result<()>;
+    async fn send_bot_image(&self, img: &[u8], api: &str) -> Result<()>;
     async fn send_msg(&self, d: SendMsgReq) -> Result<String>;
 }
 
 use crate::MP;
 use anyhow::anyhow;
+use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{debug, error, trace};
@@ -122,9 +125,6 @@ impl MsgApi for MP {
         .await
     }
 
-    //curl 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key='
-    // -H 'Content-Type: application/json'
-    // -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$NOTICE_MSG\"}}"
     async fn send_bot_msg(&self, msg: &str, api: &str) -> Result<()> {
         let resp = self
             .client
@@ -133,6 +133,57 @@ impl MsgApi for MP {
                 "msgtype": "markdown",
                 "markdown": {
                     "content": msg
+                }
+            }))
+            .send()
+            .await?;
+        debug!(
+            "企业微信机器人返回 bot resp: [{}]{:?}",
+            resp.status(),
+            resp.text().await?
+        );
+        Ok(())
+    }
+    //curl 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key='
+    // -H 'Content-Type: application/json'
+    // -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$NOTICE_MSG\"}}"
+    async fn send_bot_text(&self, msg: &str, api: &str) -> Result<()> {
+        let resp = self
+            .client
+            .post(api)
+            .json(&json!({
+                "msgtype": "text",
+                "text": {
+                    "content": msg
+                }
+            }))
+            .send()
+            .await?;
+        debug!(
+            "企业微信机器人返回 bot resp: [{}]{:?}",
+            resp.status(),
+            resp.text().await?
+        );
+        Ok(())
+    }
+
+    async fn send_bot_image(&self, img: &[u8], api: &str) -> Result<()> {
+        use md5::{Digest, Md5};
+        let data = base64::prelude::BASE64_STANDARD.encode(img);
+
+        let mut hasher = Md5::new();
+        hasher.update(img);
+        let result = hasher.finalize();
+        let md5_str = format!("{:x}", result);
+
+        let resp = self
+            .client
+            .post(api)
+            .json(&json!({
+                "msgtype": "image",
+                "image": {
+                    "base64": data,
+                    "md5": md5_str
                 }
             }))
             .send()

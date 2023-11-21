@@ -19,7 +19,6 @@ pub struct FetcherImpl {
     login_user: String,
     xx_org_gray_id: String,
     proxy_server: Option<String>,
-    app_caller: String,
     mp: MP,
 }
 
@@ -29,14 +28,12 @@ impl FetcherImpl {
         xx_org_gray_id: &str,
         mp: &MP,
         proxy_server: Option<String>,
-        app_caller: &str,
     ) -> Self {
         Self {
             login_user: login_user.to_string(),
             mp: mp.clone(),
             xx_org_gray_id: xx_org_gray_id.to_string(),
             proxy_server: proxy_server.clone().map(|s| s.to_string()),
-            app_caller: app_caller.to_string(),
         }
     }
 }
@@ -51,7 +48,6 @@ impl Fetcher for FetcherImpl {
             &self.xx_org_gray_id,
             &self.proxy_server,
             20,
-            &self.app_caller,
         )
         .await
     }
@@ -110,7 +106,6 @@ async fn browse_xx(
     date: &str,
     xx_org_gray_id: &str,
     proxy_server: &Option<String>,
-    app_caller: &str,
 ) -> Result<MemberScore> {
     let proxy_server = proxy_server.as_ref().map(|s| s.as_str());
     let launch_options = LaunchOptions::default_builder()
@@ -123,7 +118,7 @@ async fn browse_xx(
         .map_err(|e| anyhow!("构造 Chrome 启动参数失败: {}", e))?;
     let browser = Browser::new(launch_options).map_err(|e| anyhow!("启动浏览器失败: {}", e))?;
 
-    let tab = navigate_to_xx(&browser, login_user, mp, app_caller).await?;
+    let tab = navigate_to_xx(&browser, login_user, mp).await?;
 
     // Run JavaScript in the page
     let yesterday_js = include_str!("yesterday_score.js");
@@ -160,19 +155,9 @@ async fn try_browse_xx(
     xx_org_gray_id: &str,
     proxy_server: &Option<String>,
     times: i8,
-    app_caller: &str,
 ) -> Result<MemberScore> {
     for _ in 0..times {
-        match browse_xx(
-            login_user,
-            mp,
-            date,
-            xx_org_gray_id,
-            proxy_server,
-            app_caller,
-        )
-        .await
-        {
+        match browse_xx(login_user, mp, date, xx_org_gray_id, proxy_server).await {
             Ok(r) => return Ok(r),
             Err(e) => {
                 warn!("获取积分失败: {:?}", e);
@@ -182,12 +167,7 @@ async fn try_browse_xx(
     Err(anyhow!("经过{}次重试，未能成果获取积分", times))
 }
 #[instrument(skip(browser, mp))]
-async fn navigate_to_xx(
-    browser: &Browser,
-    login_user: &str,
-    mp: &MP,
-    app_caller: &str,
-) -> Result<Arc<Tab>> {
+async fn navigate_to_xx(browser: &Browser, login_user: &str, mp: &MP) -> Result<Arc<Tab>> {
     let tab = browser
         .new_tab()
         .map_err(|e| anyhow!("创建新标签页失败: {}", e))?;
@@ -199,7 +179,7 @@ async fn navigate_to_xx(
 
     if tab.get_url().starts_with("https://login.xuexi.cn") {
         info!("未登录，尝试登陆");
-        loop_login(&tab, login_user, mp, app_caller).await?;
+        loop_login(&tab, login_user, mp).await?;
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
     info!("登陆成功");
@@ -207,17 +187,14 @@ async fn navigate_to_xx(
     Ok(tab)
 }
 #[instrument(skip(tab, mp))]
-async fn loop_login(tab: &Arc<Tab>, login_user: &str, mp: &MP, app_caller: &str) -> Result<()> {
+async fn loop_login(tab: &Arc<Tab>, login_user: &str, mp: &MP) -> Result<()> {
     let tx = drop_msg_task(mp);
     info!("等待二维码刷新");
     let img_data = wait_qr(tab).map_err(|e| anyhow!("wait qr error: {:?}", e))?;
     info!("获取登陆二维码成功");
-    let login_url = study_core::decode_qr(&img_data)?;
-    let mut app_caller = app_caller.to_string();
-    app_caller.extend(form_urlencoded::byte_serialize(login_url.as_bytes()));
-    let login_url = app_caller.as_str();
+    // let login_url = study_core::decode_qr(&img_data)?;
 
-    let (m1, m2) = send_login_msg(login_user, &img_data, mp, login_url).await?;
+    let (m1, m2) = send_login_msg(login_user, &img_data, mp).await?;
     let _dms = DropMsg::new(tx, vec![m1, m2]);
     info!("已发送登陆通知");
     let btn = tab
@@ -242,12 +219,7 @@ fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
     Ok(png_data)
 }
 
-async fn send_login_msg<T: MsgApi>(
-    u: &str,
-    img_data: &[u8],
-    mp: &T,
-    login_url: &str,
-) -> Result<(String, String)> {
+async fn send_login_msg<T: MsgApi>(u: &str, img_data: &[u8], mp: &T) -> Result<(String, String)> {
     let before = chrono::Local::now().add(chrono::Duration::minutes(4));
     let m1 = mp.send_image_msg(u, img_data).await?;
 
@@ -255,8 +227,7 @@ async fn send_login_msg<T: MsgApi>(
         .send_text_msg(
             u,
             &format!(
-                "管理员\n点击链接\n{}\n或\n学习强国扫码登陆\n{} 前效",
-                login_url,
+                "管理员\n学习强国扫码登陆\n{} 前效",
                 before.format("%H:%M:%S")
             ),
         )

@@ -25,7 +25,7 @@ fn is_wx() -> bool {
     };
     let navigator = window.navigator();
     let ua = navigator.user_agent().unwrap_or("".to_string());
-    ua.contains("wxwork/")
+    ua.contains("wxwork/") || ua.contains("MicroMessenger/")
 }
 #[cfg(not(feature = "web"))]
 fn is_wx() -> bool {

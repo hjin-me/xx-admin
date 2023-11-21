@@ -3,8 +3,9 @@ pub mod fetcher;
 use crate::xxscore::fetcher::{Fetcher, Member};
 use anyhow::{anyhow, Result};
 use std::ops::Sub;
-use tracing::info;
+use tracing::{info, instrument};
 use wx::MsgApi;
+#[instrument(skip_all)]
 pub async fn daily_score<F: Fetcher, T: MsgApi>(
     date: &str,
     f: &F,
@@ -172,7 +173,6 @@ mod test {
             &c.xx_org_gray_id,
             &mp,
             c.proxy_server.clone(),
-            "",
         );
 
         daily_score(

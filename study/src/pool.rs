@@ -53,11 +53,18 @@ impl<T: UserValidator + Send + Sync + Clone + 'static> bb8::ManageConnection for
 #[cfg(test)]
 mod test {
     use super::*;
-    use std::thread;
     use std::thread::spawn;
     use std::time::Duration;
     use sysinfo::{ProcessExt, System, SystemExt};
     use tracing::{error, info};
+
+    struct MockUV {}
+
+    impl UserValidator for MockUV {
+        async fn validate(&self, uid: i64) -> Result<bool> {
+            Ok(true)
+        }
+    }
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn test_pool() {
         tracing_subscriber::fmt::init();
@@ -79,7 +86,7 @@ mod test {
             })
             .count();
 
-        let manager = XxManager {};
+        let manager = XxManager::new(MockUV {});
         let pool = bb8::Pool::builder()
             .max_size(2)
             .min_idle(Some(1))

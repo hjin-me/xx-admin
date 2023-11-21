@@ -1,10 +1,11 @@
 mod config;
 mod cron;
 mod health;
+mod push_notice;
 mod serv;
 mod xxscore;
 
-use crate::cron::start_daily_score;
+use crate::cron::{start_daily_notice, start_daily_score};
 use anyhow::Result;
 use clap::Parser;
 use std::env;
@@ -31,6 +32,9 @@ async fn main() -> Result<()> {
     debug!("RUST_LOG: {:?}", env::var_os("RUST_LOG"));
     tokio::select! {
         r = start_daily_score(&args.config) => {
+            r?
+        },
+        r = start_daily_notice(&args.config) => {
             r?
         },
         _ = signal::ctrl_c() => {
