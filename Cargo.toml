@@ -2,7 +2,7 @@
 members = ["admin_serv", "study_serv", "study", "wx", "study_core", "infra"]
 
 [workspace.package]
-version = "1.4.0"
+version = "1.4.1"
 
 [workspace.dependencies]
 anyhow = "1.0.75"

@@ -16,7 +16,10 @@ pub struct Xx {
 }
 
 impl Xx {
-    pub fn new<T: UserValidator + Send + Sync + Clone + 'static>(validator: T) -> Result<Self> {
+    pub fn new<T: UserValidator + Send + Sync + Clone + 'static>(
+        validator: T,
+        proxy_server: Option<String>,
+    ) -> Result<Self> {
         let cancel_token = CancellationToken::new();
         let (tx, rx) = std::sync::mpsc::channel::<StateChange>();
 
@@ -32,7 +35,7 @@ impl Xx {
                         info!("study 后台任务被取消");
                         return Err(anyhow!("进程退出，任务正常取消"))
                     }
-                    r = new_xx_task_bg(tx.clone(), validator) => {
+                    r = new_xx_task_bg(tx.clone(), validator, proxy_server) => {
                         trace!("后台任务好像执行完了");
                         r
                     }
@@ -151,8 +154,18 @@ impl Drop for Xx {
 #[cfg(test)]
 mod test {
     use super::*;
+    use async_trait::async_trait;
     use sysinfo::{ProcessExt, System, SystemExt};
 
+    #[derive(Clone)]
+    struct MockUV {}
+
+    #[async_trait]
+    impl UserValidator for MockUV {
+        async fn validate(&self, _: i64) -> Result<bool> {
+            Ok(true)
+        }
+    }
     #[test]
     fn test_chrome_leak() -> Result<()> {
         tracing_subscriber::fmt::init();
@@ -177,7 +190,7 @@ mod test {
             })
             .count();
 
-        let xx = Xx::new()?;
+        let xx = Xx::new(MockUV {}, None)?;
         loop {
             if xx.is_valid() {
                 break;

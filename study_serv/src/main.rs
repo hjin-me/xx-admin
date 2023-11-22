@@ -51,6 +51,8 @@ async fn main() {
         min_idle: u32,
         #[arg(short, long, default_value = "./config.toml")]
         config: String,
+        #[arg(long)]
+        proxy_server: Option<String>,
     }
 
     let args = Args::parse();
@@ -58,7 +60,7 @@ async fn main() {
     let _g = infra::otel::init_tracing_subscriber("study");
     trace!("Starting up, {:?}", args);
     // let config = backend::conf::BaseConf::from_path(&args.config).expect("读取配置文件失败");
-    let manager = XxManager::new(WBList::new(&args.config));
+    let manager = XxManager::new(WBList::new(&args.config), args.proxy_server.clone());
     trace!("init browsers");
     let pool = bb8::Pool::builder()
         .max_size(args.max_size)

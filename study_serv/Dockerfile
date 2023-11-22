@@ -1,4 +1,4 @@
-FROM hjin/dioxus-build:20231119082657b15602 as builder
+FROM hjin/dioxus-build:202311210842339af88f as builder
 WORKDIR /build
 COPY . .
 #RUN echo $(git rev-parse HEAD) > commit_id.txt

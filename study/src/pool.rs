@@ -12,15 +12,20 @@ pub type XxManagerPool<T> = bb8::Pool<XxManager<T>>;
 #[derive(Clone, Debug)]
 pub struct XxManager<T: UserValidator + Send + Sync + Clone> {
     uv: T,
+    proxy_server: Option<String>,
 }
 
 impl<T: UserValidator + Send + Sync + Clone + 'static> XxManager<T> {
-    pub fn new(v: T) -> Self {
-        Self { uv: v.clone() }
+    pub fn new(v: T, proxy_server: Option<String>) -> Self {
+        Self {
+            uv: v.clone(),
+            proxy_server,
+        }
     }
     pub async fn get_one(&self) -> Result<Xx> {
         let uv = self.uv.clone();
-        tokio::spawn(async move { Xx::new(uv) }).await?
+        let proxy_server = self.proxy_server.clone();
+        tokio::spawn(async move { Xx::new(uv, proxy_server) }).await?
     }
 }
 
@@ -86,7 +91,7 @@ mod test {
             })
             .count();
 
-        let manager = XxManager::new(MockUV {});
+        let manager = XxManager::new(MockUV {}, None);
         let pool = bb8::Pool::builder()
             .max_size(2)
             .min_idle(Some(1))

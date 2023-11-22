@@ -2,39 +2,73 @@ use crate::qrcode::decode_qr;
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use chrono::Local;
-use headless_chrome::browser::context::Context;
 use headless_chrome::browser::default_executable;
 use headless_chrome::protocol::cdp::Page;
 use headless_chrome::{Browser, LaunchOptions, Tab};
 use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 use serde::Deserialize;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use tracing::{debug, instrument, trace};
+use tracing::{debug, info, instrument, trace};
+
+pub struct ChromeBrowser {
+    browser: Browser,
+    user_dir: PathBuf,
+}
+
+impl Chrome for ChromeBrowser {
+    fn new_tab(&self) -> Result<Arc<Tab>> {
+        self.browser.new_tab()
+    }
+
+    fn get_tabs(&self) -> Result<Vec<Arc<Tab>>> {
+        let browser_tabs = self.browser.get_tabs().lock().unwrap();
+        Ok(browser_tabs.clone().into_iter().collect())
+    }
+}
+
+impl Drop for ChromeBrowser {
+    fn drop(&mut self) {
+        debug!("drop ChromeBrowser");
+        let temp_dir = self.user_dir.clone();
+        _ = std::fs::remove_dir_all(temp_dir);
+    }
+}
 
 #[instrument(skip_all)]
-pub fn new_browser() -> Result<Browser> {
+pub fn new_browser(proxy_server: Option<String>) -> Result<ChromeBrowser> {
     trace!("准备启动浏览器");
+    let temp_dir = create_unique_temp_dir();
     let mut rng = thread_rng();
     let w = rng.gen_range(1440..2000);
     let h = rng.gen_range(720..1100);
     let launch_options = LaunchOptions::default_builder()
         .path(Some(default_executable().map_err(|e| anyhow!(e))?))
         .window_size(Some((w, h)))
+        .proxy_server(proxy_server.as_deref())
         // .headless(false)
         .sandbox(false)
         .idle_browser_timeout(Duration::from_secs(300))
+        .user_data_dir(Some(temp_dir.clone()))
         // .args(vec![OsStr::new("--incognito")])
         .build()
         .map_err(|e| anyhow!("构造 Chrome 启动参数失败: {}", e))?;
     let browser = Browser::new(launch_options).map_err(|e| anyhow!("启动浏览器失败: {}", e))?;
-    Ok(browser)
+    info!(
+        "创建浏览器成功，浏览器 user_data_dir: {:?}",
+        temp_dir.display()
+    );
+    Ok(ChromeBrowser {
+        browser,
+        user_dir: temp_dir,
+    })
 }
 
 #[instrument(skip_all)]
-pub fn reset_tabs(browser: &Context) -> Result<()> {
+pub fn reset_tabs<C: Chrome>(browser: &C) -> Result<()> {
     // headless 模式 close 有问题，这样将就一下
     let tabs = browser.get_tabs().unwrap();
     for tab in tabs.iter() {
@@ -43,7 +77,7 @@ pub fn reset_tabs(browser: &Context) -> Result<()> {
     Ok(())
 }
 #[instrument(skip_all)]
-pub fn get_one_tab(browser: &Context) -> Result<Arc<Tab>> {
+pub fn get_one_tab<C: Chrome>(browser: &C) -> Result<Arc<Tab>> {
     let tabs = browser.get_tabs().unwrap();
     match tabs.into_iter().next() {
         Some(tab) => Ok(tab),
@@ -54,7 +88,7 @@ pub fn get_one_tab(browser: &Context) -> Result<Arc<Tab>> {
 }
 
 #[instrument(skip(ctx))]
-pub fn get_login_ticket(ctx: &Context<'_>) -> Result<(String, Vec<u8>)> {
+pub fn get_login_ticket<C: Chrome>(ctx: &C) -> Result<(String, Vec<u8>)> {
     reset_tabs(ctx)?;
     let tab = get_one_tab(ctx)?;
     tab.navigate_to("https://www.xuexi.cn/")
@@ -103,7 +137,7 @@ pub fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
     Ok(png_data)
 }
 #[instrument(skip_all)]
-pub fn get_xuexi_tab(ctx: &Context<'_>) -> Result<Arc<Tab>> {
+pub fn get_xuexi_tab<C: Chrome>(ctx: &C) -> Result<Arc<Tab>> {
     let r = ctx
         .get_tabs()?
         .iter()
@@ -163,42 +197,55 @@ async fn get_some_url(api: &str) -> Result<Vec<String>> {
     Ok(latest)
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    #[test]
-    fn test_new_browser() -> Result<()> {
-        let b = new_browser()?;
-        let browser_tabs = b.get_tabs().lock().unwrap();
-        // let mut tabs = vec![];
-        for tab in browser_tabs.iter() {
-            dbg!(tab.get_target_info()?);
-            // if let Some(context_id) = tab.get_browser_context_id()? {
-            //     dbg!(context_id);
-            // }
+fn create_unique_temp_dir() -> PathBuf {
+    let temp_dir = std::env::temp_dir();
+    let mut rng = thread_rng();
+    let mut path = temp_dir.clone();
+    loop {
+        let name: String = (0..10)
+            .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
+            .collect();
+        debug!("Random chars: {}", name);
+        path.push(name);
+        if !path.exists() {
+            break;
         }
-        drop(browser_tabs);
-        dbg!("context");
-        let c = b.new_context()?;
-        c.new_tab()?;
-        let browser_tabs = b.get_tabs().lock().unwrap();
-        for tab in browser_tabs.iter() {
-            dbg!(tab.get_target_info()?);
-            // if let Some(context_id) = tab.get_browser_context_id()? {
-            //     dbg!(context_id);
-            // }
-        }
-        drop(browser_tabs);
-        // let t = b.new_tab()?;
-        // t.navigate_to("http://www.baidu.com")?;
-        panic!("hei");
-
-        // thread::sleep(Duration::from_secs(60));
-        // Ok(())
     }
+    std::fs::create_dir_all(path.clone()).unwrap();
+    path
 }
-
 #[async_trait]
 pub trait UserValidator {
     async fn validate(&self, uid: i64) -> Result<bool>;
+}
+
+pub trait Chrome: Send {
+    /// Opens a new tab in this context. It will not share cookies or a cache with the default
+    /// browsing context or any other contexts created
+    fn new_tab(&self) -> Result<Arc<Tab>>;
+
+    /// Any tabs created in this context
+    fn get_tabs(&self) -> Result<Vec<Arc<Tab>>>;
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use std::thread::sleep;
+    #[test]
+    fn test_new_browser() -> Result<()> {
+        use tracing_subscriber::filter::EnvFilter;
+
+        tracing_subscriber::fmt()
+            .with_env_filter(EnvFilter::try_from_default_env()?)
+            .init();
+        info!("heihei");
+        let _b1 = new_browser(None)?;
+        info!("after b1");
+        let _b2 = new_browser(None)?;
+        info!("after b2");
+        sleep(Duration::from_secs(180));
+
+        Ok(())
+    }
 }

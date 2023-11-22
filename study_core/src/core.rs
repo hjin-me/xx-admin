@@ -3,11 +3,10 @@ pub use crate::qrcode::*;
 pub use crate::state::*;
 use crate::utils::{
     get_login_ticket, get_news_list, get_one_tab, get_video_list, get_xuexi_tab, new_browser,
-    UserValidator,
+    Chrome, UserValidator,
 };
 pub use crate::xx::Xx;
 use anyhow::{anyhow, Result};
-use headless_chrome::browser::context::Context;
 use rand::{thread_rng, Rng};
 use std::sync::mpsc::Sender;
 use std::thread;
@@ -15,16 +14,19 @@ use std::time::Duration;
 use tracing::{debug, error, info, instrument, trace, warn};
 
 #[instrument(skip_all)]
-pub async fn new_xx_task_bg<T: UserValidator>(tx: Sender<StateChange>, validator: T) -> Result<()> {
-    let browser = new_browser()?;
-    let ctx = browser.new_context()?;
+pub async fn new_xx_task_bg<T: UserValidator>(
+    tx: Sender<StateChange>,
+    validator: T,
+    proxy_server: Option<String>,
+) -> Result<()> {
+    let browser = new_browser(proxy_server)?;
     tx.send(StateChange::Init)?;
 
     loop {
-        let login_ticket = get_login_ticket(&ctx)?;
+        let login_ticket = get_login_ticket(&browser)?;
         tx.send(StateChange::WaitingLogin(login_ticket.0.clone()))?;
 
-        if let Ok(()) = waiting_login(&ctx, Duration::from_secs(130)).await {
+        if let Ok(()) = waiting_login(&browser, Duration::from_secs(130)).await {
             break;
         } else {
             tx.send(StateChange::Init)?;
@@ -32,7 +34,7 @@ pub async fn new_xx_task_bg<T: UserValidator>(tx: Sender<StateChange>, validator
     }
 
     let user_info = {
-        let tab = get_xuexi_tab(&ctx)?;
+        let tab = get_xuexi_tab(&browser)?;
         get_user_info(&tab)?
     };
     // 白名单，黑名单检查
@@ -46,14 +48,14 @@ pub async fn new_xx_task_bg<T: UserValidator>(tx: Sender<StateChange>, validator
     let video_list = get_video_list().await?;
 
     tx.send(StateChange::StartLearn)?;
-    let n = study_and_summarize(&ctx, tx.clone(), &user_info, &news_list, &video_list)?;
+    let n = study_and_summarize(&browser, tx.clone(), &user_info, &news_list, &video_list)?;
     tx.send(StateChange::Complete((user_info.nick, n)))?;
     Ok(())
 }
 
 #[instrument(skip_all, fields(nick_name = user_info.nick, uid = user_info.uid))]
-fn study_and_summarize(
-    ctx: &Context<'_>,
+fn study_and_summarize<C: Chrome>(
+    ctx: &C,
     tx: Sender<StateChange>,
     user_info: &UserInfo,
     news_list: &[String],
@@ -62,7 +64,7 @@ fn study_and_summarize(
     try_study(ctx, tx.clone(), &user_info.nick, &news_list, &video_list)?;
 
     let n = {
-        let tab = get_xuexi_tab(&ctx)?;
+        let tab = get_xuexi_tab(ctx)?;
         get_today_score(&tab)?
     };
     debug!(
@@ -76,8 +78,8 @@ fn study_and_summarize(
 }
 
 #[instrument(skip_all, fields(nick_name = nick_name))]
-fn try_study(
-    browser: &Context<'_>,
+fn try_study<C: Chrome>(
+    browser: &C,
     tx: Sender<StateChange>,
     nick_name: &str,
     news_list: &[String],
@@ -151,7 +153,7 @@ fn try_study(
 }
 
 #[instrument(skip(browser))]
-pub fn browse_news(browser: &Context<'_>, url: &str) -> Result<()> {
+pub fn browse_news<C: Chrome>(browser: &C, url: &str) -> Result<()> {
     let tab = get_one_tab(browser)?;
     tab.activate()?;
     tab.navigate_to(url)?;
@@ -173,7 +175,7 @@ pub fn browse_news(browser: &Context<'_>, url: &str) -> Result<()> {
     Ok(())
 }
 #[instrument(skip(browser))]
-pub fn browse_video(browser: &Context<'_>, url: &str) -> Result<()> {
+pub fn browse_video<C: Chrome>(browser: &C, url: &str) -> Result<()> {
     let tab = get_one_tab(browser)?;
     tab.activate()?;
     tab.navigate_to(url)?;
@@ -196,7 +198,7 @@ pub fn browse_video(browser: &Context<'_>, url: &str) -> Result<()> {
 }
 
 #[instrument(skip(ctx))]
-async fn waiting_login(ctx: &Context<'_>, timeout: Duration) -> Result<()> {
+async fn waiting_login<C: Chrome>(ctx: &C, timeout: Duration) -> Result<()> {
     let check = async {
         loop {
             match check_login(ctx) {
@@ -223,8 +225,7 @@ async fn waiting_login(ctx: &Context<'_>, timeout: Duration) -> Result<()> {
         },
     }
 }
-#[instrument(skip(ctx))]
-fn check_login(ctx: &Context<'_>) -> Result<bool> {
+fn check_login<C: Chrome>(ctx: &C) -> Result<bool> {
     Ok(ctx
         .get_tabs()?
         .iter()
@@ -233,4 +234,48 @@ fn check_login(ctx: &Context<'_>) -> Result<bool> {
             tab.wait_for_element_with_custom_timeout(".logged-text", Duration::from_secs(3))
                 .is_ok()
         }))
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use async_trait::async_trait;
+    use std::thread::spawn;
+    use tokio::time::sleep;
+
+    #[derive(Clone)]
+    struct MockUV {}
+
+    #[async_trait]
+    impl UserValidator for MockUV {
+        async fn validate(&self, _: i64) -> Result<bool> {
+            Ok(true)
+        }
+    }
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn test_multi_browser() -> Result<()> {
+        tracing_subscriber::fmt::init();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _h1 = spawn(move || {
+            info!("h1");
+            tokio::runtime::Runtime::new().unwrap().spawn(async {
+                info!("h1 browser");
+                _ = new_xx_task_bg(tx, MockUV {}, None).await;
+            });
+            _ = spawn(move || for _ in rx.iter() {}).join();
+        });
+        let (tx, rx) = std::sync::mpsc::channel();
+        let _h2 = spawn(move || {
+            info!("h2");
+            tokio::runtime::Runtime::new().unwrap().spawn(async {
+                info!("h2 browser");
+                _ = new_xx_task_bg(tx, MockUV {}, None).await;
+            });
+            _ = spawn(move || for _ in rx.iter() {}).join();
+        });
+        sleep(Duration::from_secs(120)).await;
+        // _ = h1.join();
+        // _ = h2.join();
+        Ok(())
+    }
 }
