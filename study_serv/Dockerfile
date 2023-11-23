@@ -1,7 +1,6 @@
 FROM hjin/dioxus-build:202311210842339af88f as builder
 WORKDIR /build
 COPY . .
-#RUN echo $(git rev-parse HEAD) > commit_id.txt
 RUN cd study_serv \
     && dx build --release --features web \
     && cargo build --release --features ssr

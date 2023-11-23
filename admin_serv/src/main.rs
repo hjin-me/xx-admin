@@ -74,7 +74,6 @@ async fn main() {
         .layer(Extension(mp));
 
     // run it
-    #[cfg(not(debug_assertions))]
     let app = app.layer(
         tower::ServiceBuilder::new().layer(tower_http::compression::CompressionLayer::new()),
     );
