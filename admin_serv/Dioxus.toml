@@ -1,0 +1,81 @@
+[application]
+
+# dioxus project name
+name = "admin"
+
+# default platfrom
+# you can also use `dx serve/build --platform XXX` to use other platform
+# value: web | desktop
+default_platform = "web"
+
+# Web `build` & `serve` dist path
+out_dir = "dist"
+
+# resource (static) file folder
+asset_dir = "public"
+
+[application.tools]
+# current support: wasm-opt
+# default: web
+binaryen = { wasm_opt = true }
+tailwindcss = { input = "input.css", config = "tailwind.config.js" }
+
+[web.app]
+
+# HTML title tag content
+title = "Good Good Study, Day Day Up! - Admin"
+#base_path = ""
+
+[web.watcher]
+
+index_on_404 = true
+
+watch_path = ["src", "public"]
+
+# include `assets` in web platform
+[web.resource]
+
+# CSS style file
+style = []
+
+# Javascript code file
+script = []
+
+[web.resource.dev]
+
+# Javascript code file
+# serve: [dev-server] only
+script = []
+
+[application.plugins]
+
+available = true
+
+required = []
+
+[bundler]
+# Bundle identifier
+identifier = "xx.admin"
+
+# Bundle publisher
+publisher = "admin"
+
+# Bundle icon
+icon = ["icons/icon.png"]
+
+# Bundle resources
+resources = ["public/*"]
+
+# Bundle copyright
+copyright = ""
+
+# Bundle category
+category = "Utility"
+
+# Bundle short description
+short_description = "一个学习小工具"
+
+# Bundle long description
+long_description = """
+大家都喜爱的学习工具.
+"""

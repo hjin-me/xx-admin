@@ -8,19 +8,37 @@ edition = "2021"
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 chrono = { workspace = true }
-headless_chrome = { version = "1.0.7" }
+headless_chrome = { version = "1.0.7", optional = true }
 reqwest = { workspace = true, features = ["json", "multipart"] }
 serde = { workspace = true }
 serde_json = "1.0.108"
-tokio = { version = "1.33.0", features = ["full"] }
+tokio = { version = "1.33.0", features = ["full"], optional = true }
 tracing = { workspace = true }
-toml = "0.8.6"
-clap = { version = "4.4.8", features = ["derive", "error-context", "help", "std"] }
-axum = "0.6.20"
-wx = { path = "../wx" }
-infra = { path = "../infra" }
+toml = { version = "0.8.6", optional = true }
+clap = { version = "4.4.8", features = ["derive", "error-context", "help", "std"], optional = true }
+axum = { version = "0.6.20", optional = true }
+wx = { path = "../wx", optional = true }
+infra = { path = "../infra", optional = true }
 form_urlencoded = "1.2.0"
+dioxus = "0.4.0"
+dioxus-fullstack = "0.4.1"
+tracing-wasm = { version = "0.2.1", optional = true }
+tower = { version = "0.4.13", optional = true }
+tower-http = { version = "0.5.0", features = ["fs", "trace", "compression-gzip", "compression-deflate", "compression-zstd", "async-compression", "cors"], optional = true }
+study_core = { path = "../study_core", optional = true }
+tokio-util = { version = "0.7.10", optional = true }
+qrcode-generator = "4.1.9"
+base64 = "0.21.5"
+gloo = { version = "0.10.0", features = ["futures"] }
+futures-util = "0.3.29"
 
 [dev-dependencies]
-tracing-subscriber = { version = "0.3.18" }
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
+
+
+[features]
+default = []
+ssr = ["axum", "tokio/full", "dioxus-fullstack/axum", "dioxus-fullstack/router", "clap", "tower", "tower-http", "infra", "toml", "headless_chrome", "wx", "study_core", "tokio-util"]
+web = ["dioxus-fullstack/web", "dioxus-fullstack/router", "tracing-wasm"]
+dev = []
 

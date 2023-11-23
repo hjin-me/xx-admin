@@ -1,46 +1,92 @@
-mod config;
-mod cron;
-mod health;
-mod push_notice;
-mod serv;
-mod xxscore;
+// -----------
+//! Run with:
+//!
+//! ```sh
+//! dx build --features web --release
+//! cargo run --features ssr --release
+//! ```
 
-use crate::cron::{start_daily_notice, start_daily_score};
-use anyhow::Result;
-use clap::Parser;
-use std::env;
-use tokio::signal;
-use tracing::{debug, info};
+#![allow(non_snake_case, unused)]
 
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    /// Number of times to greet
-    #[arg(short, long, default_value = "./config.toml")]
-    config: String,
+#[cfg(feature = "ssr")]
+mod backend;
+mod home;
+mod qr;
+pub mod state;
+
+use dioxus::prelude::*;
+use dioxus_fullstack::{
+    launch::{self, LaunchBuilder},
+    prelude::*,
+};
+use home::app;
+use serde::{Deserialize, Serialize};
+use tracing::{info, trace};
+
+#[cfg(feature = "web")]
+fn main() {
+    tracing_wasm::set_as_global_default();
+    LaunchBuilder::new_with_props(app, ()).launch();
 }
 
+#[cfg(any(not(feature = "web"), feature = "ssr"))]
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() {
+    use crate::backend::config::AdminConfig;
+    use crate::backend::StateSession;
+    use axum::routing::*;
+    use axum::Extension;
+    use clap::Parser;
+
+    #[derive(Parser, Debug)]
+    #[command(author, version, about, long_about = None)]
+    struct Args {
+        #[arg(short, long, default_value = "./config.toml")]
+        config: String,
+        #[arg(long)]
+        proxy_server: Option<String>,
+    }
+
     let args = Args::parse();
 
     let _g = infra::otel::init_tracing_subscriber("admin");
+    trace!("Starting up, {:?}", args);
+    let p: AdminConfig = {
+        let contents = std::fs::read_to_string(&args.config).expect("读取配置文件失败");
+        toml::from_str(contents.as_str()).expect("解析配置文件失败")
+    };
+    let mp = wx::MP::new(&p.corp_id, &p.corp_secret, p.agent_id);
+    let ss = StateSession::new(
+        mp.clone(),
+        &p.xx_org_gray_id,
+        p.proxy_server.clone(),
+        p.notice_bot.clone(),
+        p.org_id,
+        p.admin_user.clone(),
+    )
+    .expect("初始化 StateSession 失败");
 
-    let pwd = env::current_dir().unwrap();
-    debug!(conf_path = &args.config, cwd = ?pwd, "Starting up",);
-    info!("Version: {}", env!("COMMIT_ID"));
-    debug!("RUST_LOG: {:?}", env::var_os("RUST_LOG"));
-    tokio::select! {
-        r = start_daily_score(&args.config) => {
-            r?
-        },
-        r = start_daily_notice(&args.config) => {
-            r?
-        },
-        _ = signal::ctrl_c() => {
-            info!("收到退出命令");
-        },
-    }
+    // build our application with some routes
+    let app = Router::new()
+        // Server side render the application, serve static assets, and register server functions
+        .serve_dioxus_application("", ServeConfigBuilder::new(app, ()))
+        .layer(Extension(ss))
+        .layer(Extension(mp));
 
-    Ok(())
+    // run it
+    #[cfg(not(debug_assertions))]
+    let app = app.layer(
+        tower::ServiceBuilder::new().layer(tower_http::compression::CompressionLayer::new()),
+    );
+    let addr = if cfg!(debug_assertions) {
+        std::net::SocketAddr::from(([127, 0, 0, 1], 3000))
+    } else {
+        std::net::SocketAddr::from(([0, 0, 0, 0], 3000))
+    };
+
+    info!("listening: http://{}", addr.to_string());
+    axum::Server::bind(&addr)
+        .serve(app.into_make_service())
+        .await
+        .unwrap();
 }

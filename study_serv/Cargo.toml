@@ -9,10 +9,9 @@ axum = { version = "0.6.20", optional = true }
 dioxus = "0.4.0"
 dioxus-fullstack = "0.4.1"
 serde.workspace = true
-tracing-wasm = "0.2.1"
+tracing-wasm = { version = "0.2.1", optional = true }
 anyhow.workspace = true
 tracing.workspace = true
-wx = { path = "../wx", optional = true }
 study = { path = "../study", optional = true, default-features = false }
 study_core = { path = "../study_core", optional = true, default-features = false }
 toml = { version = "0.8.8", optional = true }
@@ -32,6 +31,6 @@ infra = { path = "../infra", optional = true }
 
 [features]
 default = []
-ssr = ["axum", "tokio/full", "dioxus-fullstack/axum", "dioxus-fullstack/router", "toml", "study/default", "study_core/default", "wx", "clap", "tower", "tower-http", "infra"]
-web = ["dioxus-fullstack/web", "dioxus-fullstack/router", "tokio/time", "study_core/hydrate"]
+ssr = ["axum", "tokio/full", "dioxus-fullstack/axum", "dioxus-fullstack/router", "toml", "study/default", "study_core/default", "clap", "tower", "tower-http", "infra"]
+web = ["dioxus-fullstack/web", "dioxus-fullstack/router", "tokio/time", "study_core/hydrate", "tracing-wasm"]
 dev = []

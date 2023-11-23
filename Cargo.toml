@@ -2,7 +2,7 @@
 members = ["admin_serv", "study_serv", "study", "wx", "study_core", "infra"]
 
 [workspace.package]
-version = "1.4.1"
+version = "1.4.2"
 
 [workspace.dependencies]
 anyhow = "1.0.75"
@@ -24,5 +24,3 @@ strip = true        # Automatically strip symbols from the binary.
 name = "xx"
 version.workspace = true
 edition = "2021"
-[dependencies]
-reqwest = { workspace = true }

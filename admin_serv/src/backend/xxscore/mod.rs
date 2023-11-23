@@ -1,24 +1,20 @@
 pub mod fetcher;
-
-use crate::xxscore::fetcher::{Fetcher, Member};
+mod xx;
+use crate::state::{Member, MemberScore};
 use anyhow::{anyhow, Result};
 use std::ops::Sub;
 use tracing::{info, instrument};
 use wx::MsgApi;
+pub use xx::XxAdmin;
+
 #[instrument(skip_all)]
-pub async fn daily_score<F: Fetcher, T: MsgApi>(
-    date: &str,
-    f: &F,
-    wechat_bots: Vec<&str>,
+pub async fn daily_score<T: MsgApi>(
+    mut score: MemberScore,
+    wechat_bots: Vec<String>,
     org_id: u64,
     admin_user: &str,
     mp: &T,
 ) -> Result<()> {
-    let mut score = f
-        .get_score(date)
-        .await
-        .map_err(|e| anyhow!("获取积分失败: {}", e))?;
-
     score.data.sort_by(|a, b| {
         b.range_real_score
             .partial_cmp(&a.range_real_score)
@@ -75,16 +71,19 @@ pub async fn daily_score<F: Fetcher, T: MsgApi>(
 {}
 
 {}"#,
-        date, grind_msg, org_rank_msg, encourage_msg
+        score.date.clone(),
+        grind_msg,
+        org_rank_msg,
+        encourage_msg
     );
 
     for bot in wechat_bots {
-        mp.send_bot_msg(&msg, bot)
+        mp.send_bot_msg(&msg, &bot)
             .await
             .map_err(|e| anyhow!("发送消息给群机器人失败: {}", e))?;
     }
     // 发送全量汇总信息给管理员
-    total_notice(mp, date, score.data, admin_user)
+    total_notice(mp, &score.date, score.data, admin_user)
         .await
         .map_err(|e| anyhow!("发送消息给管理员失败: {}", e))?;
 
@@ -139,8 +138,8 @@ pub fn get_yesterday() -> String {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::config::AdminConfig;
-    use crate::xxscore::fetcher::MemberScore;
+    use crate::backend::config::AdminConfig;
+    use crate::state::MemberScore;
     use async_trait::async_trait;
     use wx::MP;
 
@@ -148,18 +147,11 @@ mod test {
         data: MemberScore,
     }
 
-    #[async_trait]
-    impl Fetcher for MockFetcher {
-        async fn get_score(&self, _: &str) -> Result<MemberScore> {
-            Ok(self.data.clone())
-        }
-    }
-
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn test_cmd() -> Result<()> {
         tracing_subscriber::fmt::init();
 
-        let conf_str = include_str!("../../config.toml");
+        let conf_str = include_str!("../../../config.toml");
         let c = toml::from_str::<AdminConfig>(conf_str)?;
 
         // let j: MemberScore =
@@ -168,16 +160,8 @@ mod test {
         // let xx_fetcher = MockFetcher { data: j };
         let mp = MP::new(&c.corp_id, &c.corp_secret, c.agent_id);
 
-        let xx_fetcher = fetcher::FetcherImpl::new(
-            &c.admin_user,
-            &c.xx_org_gray_id,
-            &mp,
-            c.proxy_server.clone(),
-        );
-
         daily_score(
-            "20231105",
-            &xx_fetcher,
+            MemberScore::default(),
             c.notice_bot.iter().map(|s| s.as_str()).collect(),
             c.org_id,
             c.admin_user.as_str(),

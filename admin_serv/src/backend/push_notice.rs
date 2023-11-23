@@ -30,12 +30,12 @@ pub async fn push_notice(
 
 #[cfg(test)]
 mod test {
+    use crate::backend::config::AdminConfig;
     use super::*;
-    use crate::config::AdminConfig;
 
     #[tokio::test]
     async fn test_push_notice() -> Result<()> {
-        let p: AdminConfig = toml::from_str(include_str!("../config.toml"))?;
+        let p: AdminConfig = toml::from_str(include_str!("../../config.toml"))?;
 
         let mp = wx::MP::new(&p.corp_id, &p.corp_secret, p.agent_id);
 
