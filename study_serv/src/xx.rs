@@ -18,6 +18,7 @@ pub struct StudyConfig {
     pub app_caller: String,
 }
 
+#[instrument]
 pub async fn try_get_ticket(s_id: u64) -> Result<String> {
     use crate::backend::user_validator::WBList;
     use axum::Extension;
@@ -39,6 +40,7 @@ pub async fn try_get_ticket(s_id: u64) -> Result<String> {
     }
     Err(anyhow!("获取 ticket 失败"))
 }
+#[instrument]
 pub async fn try_get_current_user(s_id: u64) -> Result<String> {
     use crate::backend::user_validator::WBList;
     use axum::Extension;
@@ -61,6 +63,7 @@ pub async fn try_get_current_user(s_id: u64) -> Result<String> {
     Err(anyhow!("获取用户名失败"))
 }
 
+#[instrument]
 pub async fn try_get_state(s_id: u64) -> Result<State> {
     use crate::backend::user_validator::WBList;
     use axum::Extension;
@@ -72,6 +75,7 @@ pub async fn try_get_state(s_id: u64) -> Result<State> {
     Ok(state.get_state())
 }
 
+#[instrument]
 pub async fn start_new_task() -> Result<u64> {
     use crate::backend::user_validator::WBList;
     use axum::Extension;

@@ -1,6 +1,8 @@
 use anyhow::{anyhow, Result};
 use qrcode_generator::QrCodeEcc;
+use tracing::instrument;
 
+#[instrument(skip_all, level = "trace")]
 pub fn decode_qr(b: &[u8]) -> Result<String> {
     let img = image::load_from_memory(b)?;
 
@@ -17,6 +19,7 @@ pub fn decode_qr(b: &[u8]) -> Result<String> {
     })
 }
 
+#[instrument(skip_all, level = "trace")]
 pub fn gen_qr(d: &str) -> Result<Vec<u8>> {
     let result: Vec<u8> = qrcode_generator::to_png_to_vec(d, QrCodeEcc::Low, 320)?;
     Ok(result)

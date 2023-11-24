@@ -67,7 +67,7 @@ pub fn new_browser(proxy_server: Option<String>) -> Result<ChromeBrowser> {
     })
 }
 
-#[instrument(skip_all)]
+#[instrument(skip_all, level = "trace")]
 pub fn reset_tabs<C: Chrome>(browser: &C) -> Result<()> {
     // headless 模式 close 有问题，这样将就一下
     let tabs = browser.get_tabs().unwrap();
@@ -76,7 +76,7 @@ pub fn reset_tabs<C: Chrome>(browser: &C) -> Result<()> {
     }
     Ok(())
 }
-#[instrument(skip_all)]
+#[instrument(skip_all, level = "trace")]
 pub fn get_one_tab<C: Chrome>(browser: &C) -> Result<Arc<Tab>> {
     let tabs = browser.get_tabs().unwrap();
     match tabs.into_iter().next() {
@@ -136,7 +136,7 @@ pub fn wait_qr(tab: &Arc<Tab>) -> Result<Vec<u8>> {
     )?;
     Ok(png_data)
 }
-#[instrument(skip_all)]
+#[instrument(skip_all, level = "trace")]
 pub fn get_xuexi_tab<C: Chrome>(ctx: &C) -> Result<Arc<Tab>> {
     let r = ctx
         .get_tabs()?
@@ -174,7 +174,7 @@ struct News {
     audit_time: String,
     url: String,
 }
-#[instrument]
+#[instrument(level = "trace")]
 async fn get_some_url(api: &str) -> Result<Vec<String>> {
     let resp = reqwest::get(api)
         .await

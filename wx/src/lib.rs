@@ -8,7 +8,7 @@ use serde::Deserialize;
 use std::ops::Add;
 use std::sync::Arc;
 use tokio::sync::RwLock;
-use tracing::trace;
+use tracing::{instrument, trace};
 
 struct Token {
     content: String,
@@ -43,6 +43,7 @@ impl MP {
             client: Client::new(),
         }
     }
+    #[instrument(skip(self))]
     async fn get_access_token(&self) -> Result<(String, i64)> {
         let r = self
             .client
@@ -62,6 +63,7 @@ impl MP {
         }
         Err(anyhow!("access_token or expires_in is None"))
     }
+    #[instrument(skip(self))]
     async fn refresh_token(&self) -> Result<()> {
         trace!("refresh_token");
         let (access_token, expires_in) = self.get_access_token().await?;
@@ -71,6 +73,7 @@ impl MP {
         Ok(())
     }
 
+    #[instrument(skip(self), level = "trace")]
     async fn get_token(&self) -> Result<String> {
         let token = self.access_token.read().await;
         if token.expires_after < Local::now() {

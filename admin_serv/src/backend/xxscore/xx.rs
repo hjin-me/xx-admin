@@ -6,7 +6,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
-use tracing::{debug, error, info, trace};
+use tracing::{debug, error, info, instrument, trace};
 
 #[derive(Clone)]
 pub struct XxAdmin {
@@ -104,6 +104,7 @@ impl XxAdmin {
         })
     }
 
+    #[instrument(skip_all, level = "trace")]
     pub fn get_state(&self) -> State {
         // trace!("get_state");
         match self.state.read() {
@@ -112,6 +113,7 @@ impl XxAdmin {
         }
     }
 
+    #[instrument(skip_all, level = "trace")]
     pub fn ping(&self) -> bool {
         trace!("ping");
         self.available_before > chrono::Local::now()

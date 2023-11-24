@@ -10,6 +10,7 @@ use tokio::time;
 use tokio::time::sleep;
 use tracing::{error, info, instrument, warn};
 
+#[instrument(skip_all, level = "info")]
 pub async fn try_get_state() -> Result<State> {
     let Extension(ss): Extension<StateSession> = extract().await?;
 

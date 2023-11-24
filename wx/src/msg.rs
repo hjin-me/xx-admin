@@ -20,10 +20,11 @@ use anyhow::anyhow;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::{debug, error, trace};
+use tracing::{debug, error, instrument, trace};
 
 #[async_trait::async_trait]
 impl MsgApi for MP {
+    #[instrument(skip(self))]
     async fn recall_msgs(&self, msgs: Vec<String>) -> Result<()> {
         let token = self.get_token().await?;
         let api = format!(
@@ -50,6 +51,7 @@ impl MsgApi for MP {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn send_image_msg(&self, to_user: &str, img_data: &[u8]) -> Result<String> {
         let token = self.get_token().await?;
         let api = format!(
@@ -95,6 +97,7 @@ impl MsgApi for MP {
         .await
     }
 
+    #[instrument(skip(self))]
     async fn send_text_msg(&self, to_user: &str, msg: &str) -> Result<String> {
         self.send_msg(SendMsgReq::Text(SendTextMsgReq {
             common: SendMsgCommon {
@@ -110,6 +113,7 @@ impl MsgApi for MP {
         .await
     }
 
+    #[instrument(skip(self))]
     async fn send_markdown_msg(&self, to_user: &str, msg: &str) -> Result<String> {
         self.send_msg(SendMsgReq::Markdown(SendMarkdownMsgReq {
             common: SendMsgCommon {
@@ -125,6 +129,7 @@ impl MsgApi for MP {
         .await
     }
 
+    #[instrument(skip(self))]
     async fn send_bot_msg(&self, msg: &str, api: &str) -> Result<()> {
         let resp = self
             .client
@@ -147,6 +152,7 @@ impl MsgApi for MP {
     //curl 'https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key='
     // -H 'Content-Type: application/json'
     // -d "{\"msgtype\":\"text\",\"text\":{\"content\":\"$NOTICE_MSG\"}}"
+    #[instrument(skip(self))]
     async fn send_bot_text(&self, msg: &str, api: &str) -> Result<()> {
         let resp = self
             .client
@@ -167,6 +173,7 @@ impl MsgApi for MP {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn send_bot_image(&self, img: &[u8], api: &str) -> Result<()> {
         use md5::{Digest, Md5};
         let data = base64::prelude::BASE64_STANDARD.encode(img);
@@ -196,6 +203,7 @@ impl MsgApi for MP {
         Ok(())
     }
 
+    #[instrument(skip(self))]
     async fn send_msg(&self, mut d: SendMsgReq) -> Result<String> {
         let token = self.get_token().await?;
         let api = format!(

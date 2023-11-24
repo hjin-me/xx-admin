@@ -17,6 +17,7 @@ use tokio::time::sleep;
 use tokio_util::sync::CancellationToken;
 #[cfg(feature = "server")]
 use tracing::{error, info};
+use tracing::instrument;
 
 #[cfg(feature = "server")]
 #[derive(Clone)]
@@ -32,6 +33,7 @@ impl XxState {
         }
     }
 
+    #[instrument(skip_all, level = "trace")]
     pub fn serve<T: UserValidator + Send + Sync + Clone + 'static>(
         &self,
         pool: XxManagerPool<T>,
@@ -100,11 +102,13 @@ impl XxState {
         Ok(())
     }
 
+    #[instrument(skip_all, level = "trace")]
     pub fn get_state(&self) -> State {
         let s = self.state.read().unwrap();
         (*s.deref()).clone()
     }
 
+    #[instrument(skip_all, level = "trace")]
     pub fn get_ticket(&self) -> Result<String> {
         let s = self.get_state();
         match s {
@@ -118,6 +122,7 @@ impl XxState {
         }
     }
 
+    #[instrument(skip_all, level = "trace")]
     pub fn get_nick_name(&self) -> Result<String> {
         let s = self.get_state();
         match s {
@@ -126,6 +131,7 @@ impl XxState {
             _ => Err(anyhow!("还没有获取到 nick_name")),
         }
     }
+    #[instrument(skip_all, level = "trace")]
     pub fn get_score(&self) -> Result<i64> {
         let s = self.get_state();
         match s {

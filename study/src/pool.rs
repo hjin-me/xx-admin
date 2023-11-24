@@ -5,7 +5,7 @@ use async_trait::async_trait;
 pub use bb8;
 use study_core::utils::UserValidator;
 use study_core::Xx;
-use tracing::debug;
+use tracing::{debug, instrument};
 //
 
 pub type XxManagerPool<T> = bb8::Pool<XxManager<T>>;
@@ -22,6 +22,7 @@ impl<T: UserValidator + Send + Sync + Clone + 'static> XxManager<T> {
             proxy_server,
         }
     }
+    #[instrument(skip(self), level = "trace")]
     pub async fn get_one(&self) -> Result<Xx> {
         let uv = self.uv.clone();
         let proxy_server = self.proxy_server.clone();
@@ -34,10 +35,12 @@ impl<T: UserValidator + Send + Sync + Clone + 'static> bb8::ManageConnection for
     type Connection = Xx;
     type Error = anyhow::Error;
 
+    #[instrument(skip_all, level = "trace")]
     async fn connect(&self) -> Result<Self::Connection, Self::Error> {
         self.get_one().await
     }
 
+    #[instrument(skip_all, level = "trace")]
     async fn is_valid(&self, conn: &mut Self::Connection) -> Result<(), Self::Error> {
         if conn.is_valid() {
             debug!("connect is valid");
@@ -48,6 +51,7 @@ impl<T: UserValidator + Send + Sync + Clone + 'static> bb8::ManageConnection for
         }
     }
 
+    #[instrument(skip_all, level = "trace")]
     fn has_broken(&self, conn: &mut Self::Connection) -> bool {
         let r = conn.ping();
         debug!("connect ping = {}", r);

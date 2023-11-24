@@ -4,6 +4,7 @@ use anyhow::Result;
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, RwLock};
+use tracing::instrument;
 use study_core::utils::UserValidator;
 
 #[derive(Clone)]
@@ -22,11 +23,13 @@ impl<T: UserValidator + Clone + Send + Sync + 'static> StateSession<T> {
         }
     }
 
+    #[instrument(skip(self), level = "trace")]
     pub fn get(&self, id: u64) -> Option<XxState> {
         let data = self.data.read().unwrap();
         data.get(&id).map(|s| s.clone())
     }
 
+    #[instrument(skip(self), level = "trace")]
     pub fn new_state(&self) -> Result<u64> {
         let id = self
             .counter

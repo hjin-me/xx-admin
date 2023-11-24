@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, RwLock};
 use study_core::utils::UserValidator;
+use tracing::instrument;
 use wx::MP;
 
 #[derive(Clone)]
@@ -41,6 +42,7 @@ impl StateSession {
             admin_user,
         })
     }
+    #[instrument(skip_all, level = "trace")]
     fn renew(&self) -> Result<()> {
         let xx = XxAdmin::new(&self.xx_org_gray_id, self.proxy_server.clone())?;
         let mut d = self.data.write().unwrap();
@@ -48,6 +50,7 @@ impl StateSession {
         Ok(())
     }
 
+    #[instrument(skip_all, level = "trace")]
     pub async fn get(&self) -> Result<State> {
         let s = {
             let data = self.data.read().unwrap();

@@ -1,3 +1,4 @@
+use crate::UserInfo;
 use anyhow::{anyhow, Result};
 use headless_chrome::Tab;
 use serde::{Deserialize, Serialize};
@@ -5,7 +6,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tracing::{debug, instrument, trace, warn};
-use crate::UserInfo;
 
 #[derive(Deserialize, Debug)]
 struct UserInfoResp {
@@ -37,7 +37,7 @@ pub fn get_user_info(tab: &Arc<Tab>) -> Result<UserInfo> {
     Ok(result.data)
 }
 
-#[instrument(skip(tab))]
+#[instrument(skip(tab), level = "trace")]
 pub fn scroll_to(tab: &Arc<Tab>, to: i64) -> Result<()> {
     trace!("页面滚动一下");
     let smooth_scroll_js = include_str!("smooth_scroll.js");
