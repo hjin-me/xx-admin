@@ -1,0 +1,17 @@
+org_id = 123456789
+xx_org_gray_id = "从网页抓取的 orgGrayId"
+admin_user = "管理员企业微信ID"
+notice_bot = ["https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=*", "企业微信的机器人地址"]
+exec_hour = 15
+exec_minute = 30
+
+corp_id = "企业微信配置"
+corp_secret = "企业微信配置"
+agent_id = 1 # 企业微信配置
+
+[[notice_schedule]]
+hour = 14
+minute = 40
+notice_bot = ["https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=*"]
+notice_id = ["企业微信ID"]
+text = "消息内容" # optional

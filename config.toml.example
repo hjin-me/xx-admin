@@ -1,8 +1,0 @@
-org_id = 组织ID
-xx_org_gray_id = "学习组织 orgGrayId"
-admin_user = "企业微信ID"
-wechat_proxy = "https://github.com/hjin-me/wechat-proxy"
-notice_bot = ["https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=***"]
-exec_hour = 16
-exec_minute = 17
-proxy_server = "代理服务器（可选）"

@@ -1,0 +1,2 @@
+white_list = [1, 2, 3]
+black_list = [4, 5, 6]

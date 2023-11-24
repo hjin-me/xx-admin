@@ -6,6 +6,11 @@
 
 ## 部署方法
 
-修改 config.toml.example 里面的内容
+修改 `admin_serv/config.toml.example` 里面的内容
 
-`docker run -v `pwd`:/data/config.toml hjin/xx-admin:1.0.8 -c /data/config.toml`
+`docker run -v `pwd`:/data/ hjin/xx-admin:1.4.3 -c /data/config.toml`
+
+## 功能
+
+* 每日定时通知，可以发送到企业微信应用和企业微信群机器人
+* 浏览器爬取，通过扫码登陆后，自动统计前一日的积分情况进行通报
