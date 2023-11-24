@@ -11,7 +11,7 @@ use tracing::{info, trace, warn};
 pub async fn start_daily_notice(conf_path: &str) -> Result<()> {
     let contents = fs::read_to_string(conf_path).await?;
     let p: AdminConfig = toml::from_str(contents.as_str())?;
-    info!("学习任务定时任务已启动");
+    info!("通知任务定时任务已启动");
     let mut ticker = interval(Duration::from_secs(60));
 
     let mp = wx::MP::new(&p.corp_id, &p.corp_secret, p.agent_id);

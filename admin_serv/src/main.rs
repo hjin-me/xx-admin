@@ -66,6 +66,11 @@ async fn main() {
     )
     .expect("初始化 StateSession 失败");
 
+    let conf_path = args.config;
+    tokio::spawn(async move {
+        _ = backend::serve(&conf_path).await;
+    });
+
     // build our application with some routes
     let app = Router::new()
         // Server side render the application, serve static assets, and register server functions
