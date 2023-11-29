@@ -63,7 +63,7 @@ pub async fn try_get_current_user(s_id: u64) -> Result<String> {
     Err(anyhow!("获取用户名失败"))
 }
 
-#[instrument]
+#[instrument(level = "trace")]
 pub async fn try_get_state(s_id: u64) -> Result<State> {
     use crate::backend::user_validator::WBList;
     use axum::Extension;
@@ -72,10 +72,10 @@ pub async fn try_get_state(s_id: u64) -> Result<State> {
 
     let state = ss.get(s_id).ok_or(anyhow!("没有找到状态数据"))?;
 
-    Ok(state.get_state())
+    Ok(state.get_state().0)
 }
 
-#[instrument]
+#[instrument(level = "trace")]
 pub async fn start_new_task() -> Result<u64> {
     use crate::backend::user_validator::WBList;
     use axum::Extension;
@@ -83,6 +83,18 @@ pub async fn start_new_task() -> Result<u64> {
     let Extension(ss): Extension<StateSession<WBList>> = extract().await?;
     let s_id = ss.new_state()?;
     Ok(s_id)
+}
+#[instrument]
+pub async fn get_today_report() -> Result<Vec<State>> {
+    use crate::backend::user_validator::WBList;
+    use axum::Extension;
+    use chrono::Local;
+    use study::StateSession;
+    let Extension(ss): Extension<StateSession<WBList>> = extract().await?;
+
+    let states = ss.get_history(Local::now());
+
+    Ok(states)
 }
 
 #[cfg(test)]

@@ -2,6 +2,7 @@
 use crate::XxManagerPool;
 #[cfg(feature = "server")]
 use anyhow::{anyhow, Result};
+use chrono::{DateTime, Local};
 #[cfg(feature = "server")]
 use std::ops::Deref;
 #[cfg(feature = "server")]
@@ -15,21 +16,21 @@ use study_core::State;
 use tokio::time::sleep;
 #[cfg(feature = "server")]
 use tokio_util::sync::CancellationToken;
+use tracing::instrument;
 #[cfg(feature = "server")]
 use tracing::{error, info};
-use tracing::instrument;
 
 #[cfg(feature = "server")]
 #[derive(Clone)]
 pub struct XxState {
-    state: Arc<RwLock<State>>,
+    state: Arc<RwLock<(State, DateTime<Local>)>>,
 }
 
 #[cfg(feature = "server")]
 impl XxState {
     pub fn new() -> Self {
         Self {
-            state: Arc::new(RwLock::new(State::Prepare)),
+            state: Arc::new(RwLock::new((State::Prepare, Local::now()))),
         }
     }
 
@@ -95,7 +96,7 @@ impl XxState {
         thread::spawn(move || {
             for x in rx.iter() {
                 let mut s = state.write().unwrap();
-                *s = x.clone();
+                *s = (x.clone(), Local::now());
             }
         });
 
@@ -103,14 +104,14 @@ impl XxState {
     }
 
     #[instrument(skip_all, level = "trace")]
-    pub fn get_state(&self) -> State {
+    pub fn get_state(&self) -> (State, DateTime<Local>) {
         let s = self.state.read().unwrap();
         (*s.deref()).clone()
     }
 
     #[instrument(skip_all, level = "trace")]
     pub fn get_ticket(&self) -> Result<String> {
-        let s = self.get_state();
+        let (s, _) = self.get_state();
         match s {
             State::WaitingLogin((t, ts)) => {
                 if ts < chrono::Local::now().timestamp() {
@@ -124,7 +125,7 @@ impl XxState {
 
     #[instrument(skip_all, level = "trace")]
     pub fn get_nick_name(&self) -> Result<String> {
-        let s = self.get_state();
+        let (s, _) = self.get_state();
         match s {
             State::WaitingLogin(_) => Err(anyhow!("还没有登陆")),
             State::Logged(n) => Ok(n.clone()),
@@ -133,7 +134,7 @@ impl XxState {
     }
     #[instrument(skip_all, level = "trace")]
     pub fn get_score(&self) -> Result<i64> {
-        let s = self.get_state();
+        let (s, _) = self.get_state();
         match s {
             State::WaitingLogin(_) => Err(anyhow!("还没有登陆")),
             State::Logged(_) => Err(anyhow!("还没有开始学习")),
@@ -150,7 +151,7 @@ mod test {
     #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
     async fn test_state() -> Result<()> {
         tracing_subscriber::fmt::init();
-        let manager = XxManager::new();
+        let manager = XxManager::new(());
         let pool = bb8::Pool::builder()
             .max_size(2)
             .min_idle(Some(1))

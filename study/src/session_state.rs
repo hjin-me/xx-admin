@@ -1,11 +1,13 @@
 use crate::state::XxState;
 use crate::XxManagerPool;
 use anyhow::Result;
+use chrono::{DateTime, Local};
 use std::collections::HashMap;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, RwLock};
-use tracing::instrument;
 use study_core::utils::UserValidator;
+use study_core::State;
+use tracing::instrument;
 
 #[derive(Clone)]
 pub struct StateSession<T: UserValidator + Clone + Sync + Send + 'static> {
@@ -40,6 +42,18 @@ impl<T: UserValidator + Clone + Send + Sync + 'static> StateSession<T> {
         data.insert(id, state);
         Ok(id)
     }
+    #[instrument(skip(self), level = "trace")]
+    pub fn get_history(&self, date: DateTime<Local>) -> Vec<State> {
+        let data = self.data.read().unwrap();
+        let mut vs = vec![];
+        for (_, xs) in data.iter() {
+            let (ss, t) = xs.get_state();
+            if date.date_naive() == t.date_naive() {
+                vs.push(ss.clone());
+            }
+        }
+        vs
+    }
 }
 
 #[cfg(test)]
@@ -50,11 +64,17 @@ mod test {
     use std::time::Duration;
     use study_core::State;
     use tracing::info;
+    struct MockUV {}
 
+    impl UserValidator for MockUV {
+        async fn validate(&self, uid: i64) -> Result<bool> {
+            Ok(true)
+        }
+    }
     #[tokio::test(flavor = "multi_thread", worker_threads = 3)]
     async fn test_state() -> Result<()> {
         tracing_subscriber::fmt::init();
-        let manager = XxManager::new();
+        let manager = XxManager::new(MockUV {}, None);
         let pool = bb8::Pool::builder()
             .max_size(2)
             .min_idle(Some(1))
@@ -64,7 +84,7 @@ mod test {
             .await
             .unwrap();
 
-        let ss = StateSession::new(&pool);
+        let ss = StateSession::new(pool);
         let s_id = ss.new_state()?;
         loop {
             {

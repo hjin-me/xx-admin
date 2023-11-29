@@ -28,6 +28,10 @@ clap = { version = "4.4.8", features = ["derive", "error-context", "help", "std"
 tower = { version = "0.4.13", optional = true }
 tower-http = { version = "0.4.0", features = ["fs", "trace", "compression-gzip", "compression-deflate", "compression-zstd", "async-compression", "cors"], optional = true }
 infra = { path = "../infra", optional = true }
+chrono = { workspace = true, features = ["serde"] }
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 
 [features]
 default = []
