@@ -2,7 +2,7 @@
 members = ["admin_serv", "study_serv", "study", "wx", "study_core", "infra"]
 
 [workspace.package]
-version = "1.4.3"
+version = "1.4.4"
 
 [workspace.dependencies]
 anyhow = "1.0.75"
@@ -11,6 +11,10 @@ chrono = "0.4.31"
 serde = "1.0.190"
 tracing = "0.1.40"
 reqwest = "0.11.22"
+study = { path = "study", default-features = false }
+wx = { path = "wx" }
+study_core = { path = "study_core", default-features = false }
+infra = { path = "infra" }
 
 [profile.release]
 opt-level = "z"     # Optimize for size.

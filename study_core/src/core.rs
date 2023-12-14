@@ -278,4 +278,11 @@ mod test {
         // _ = h2.join();
         Ok(())
     }
+    #[test]
+    fn test_close() {
+        // TODO 等他们解决关闭标签页的问题
+        let browser = new_browser(None).unwrap();
+        let tab = get_one_tab(&browser).unwrap();
+        tab.close(false).unwrap();
+    }
 }
