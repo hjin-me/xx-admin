@@ -3,6 +3,7 @@ use crate::backend::push_notice::push_notice;
 use crate::backend::xxscore::{daily_score, get_yesterday};
 use anyhow::Result;
 use chrono::{Local, Timelike};
+use reqwest::Proxy;
 use std::time::Duration;
 use tokio::fs;
 use tokio::time::interval;
@@ -14,7 +15,11 @@ pub async fn start_daily_notice(conf_path: &str) -> Result<()> {
     info!("通知任务定时任务已启动");
     let mut ticker = interval(Duration::from_secs(60));
 
-    let mp = wx::MP::new(&p.corp_id, &p.corp_secret, p.agent_id);
+    let px = match p.mp.proxy_server {
+        Some(s) => Some(Proxy::all(s)?),
+        None => None,
+    };
+    let mp = wx::MP::new(&p.mp.corp_id, &p.mp.corp_secret, p.mp.agent_id, px);
 
     loop {
         ticker.tick().await;

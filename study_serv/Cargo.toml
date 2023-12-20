@@ -6,8 +6,8 @@ edition = "2021"
 
 [dependencies]
 axum = { version = "0.6.20", optional = true }
-dioxus = { git = "https://github.com/DioxusLabs/dioxus.git", branch = "master" }
-dioxus-fullstack = { git = "https://github.com/DioxusLabs/dioxus.git", branch = "master" }
+dioxus = { version = "0.4" }
+dioxus-fullstack = { version = "0.4" }
 serde.workspace = true
 tracing-wasm = { version = "0.2.1", optional = true }
 anyhow.workspace = true

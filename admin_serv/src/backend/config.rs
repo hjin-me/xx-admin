@@ -9,13 +9,18 @@ pub struct AdminConfig {
     pub proxy_server: Option<String>, // 代理服务器地址
     pub exec_hour: u32,               // 发送通知的小时
     pub exec_minute: u32,             // 发送通知的分钟
-    // pub app_caller: String,
 
+    pub mp: MpConfig,
+
+    pub notice_schedule: Vec<NoticeSchedule>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MpConfig {
+    pub proxy_server: Option<String>, // 代理服务器地址
     pub corp_id: String,
     pub corp_secret: String,
     pub agent_id: i64,
-
-    pub notice_schedule: Vec<NoticeSchedule>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
