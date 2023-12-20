@@ -20,6 +20,7 @@ use dioxus_fullstack::{
     prelude::*,
 };
 use home::app;
+use reqwest::Proxy;
 use serde::{Deserialize, Serialize};
 use tracing::{info, trace};
 
@@ -43,8 +44,6 @@ async fn main() {
     struct Args {
         #[arg(short, long, default_value = "./config.toml")]
         config: String,
-        #[arg(long)]
-        proxy_server: Option<String>,
     }
 
     let args = Args::parse();
@@ -55,7 +54,11 @@ async fn main() {
         let contents = std::fs::read_to_string(&args.config).expect("读取配置文件失败");
         toml::from_str(contents.as_str()).expect("解析配置文件失败")
     };
-    let mp = wx::MP::new(&p.corp_id, &p.corp_secret, p.agent_id);
+    let mp_ps = match p.mp.proxy_server {
+        Some(p) => Some(Proxy::all(p).expect("初始化代理错误")),
+        None => None,
+    };
+    let mp = wx::MP::new(&p.mp.corp_id, &p.mp.corp_secret, p.mp.agent_id, mp_ps);
     let ss = StateSession::new(
         mp.clone(),
         &p.xx_org_gray_id,

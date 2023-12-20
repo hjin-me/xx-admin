@@ -3,7 +3,7 @@ mod msg;
 use anyhow::{anyhow, Result};
 use chrono::{Duration, Local};
 pub use msg::*;
-use reqwest::Client;
+use reqwest::{Client, ClientBuilder, Proxy};
 use serde::Deserialize;
 use std::ops::Add;
 use std::sync::Arc;
@@ -31,7 +31,18 @@ pub struct MP {
 }
 
 impl MP {
-    pub fn new(corp_id: &str, corp_secret: &str, agent_id: i64) -> Self {
+    pub fn new(
+        corp_id: &str,
+        corp_secret: &str,
+        agent_id: i64,
+        proxy_server: Option<Proxy>,
+    ) -> Self {
+        let cb = ClientBuilder::default().no_proxy();
+        let cb = match proxy_server {
+            Some(p) => cb.proxy(p),
+            None => cb,
+        };
+        let client = cb.build().expect("初始化代理失败");
         Self {
             corp_id: corp_id.to_string(),
             corp_secret: corp_secret.to_string(),
@@ -40,7 +51,7 @@ impl MP {
                 content: "".to_string(),
                 expires_after: Local::now(),
             })),
-            client: Client::new(),
+            client,
         }
     }
     #[instrument(skip(self))]
